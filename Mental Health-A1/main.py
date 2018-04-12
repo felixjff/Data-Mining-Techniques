@@ -17,14 +17,14 @@ from scipy.stats import norm
 
 #loading data
 dataset = pd.read_csv("Data/dataset_mood_smartphone.csv")
-dataset['time'] = pd.to_datetime(dataset['time'], format = '%Y%m%d', unit ='d', errors = 'coerce')
+#dataset['time'] = pd.to_datetime(dataset['time'], format = '%Y%m%D', errors = 'coerce') #convert dates to datetime object (or a series), seems to miscreate 'datetime'
+dataset['time'] = pd.to_datetime(dataset['time'])
 variables = dataset['variable'].unique()
 
 #Missing values? 
 dataset['variable'].isnull().any()
 
 #Aggregation to daily average 
-dataset = pd.DataFrame(dataset)
-dAgg = pd.DataFrame() #creates a new dataframe that's empty
-   
-    
+datasetFrame = pd.DataFrame(dataset)
+datasetFrameGroup = datasetFrame.groupby(['id', datasetFrame['time'].dt.day, 'variable'])['value'].mean() #hierarchical grouping: id > time > variable, averaging the values of the variable. Seems to lose the exact date information
+print(datasetFrameGroup.head(3000)) #to check grouping and values
