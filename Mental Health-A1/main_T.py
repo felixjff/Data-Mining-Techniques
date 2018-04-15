@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import datetime
+import xgboost as xgb
 
 plt.rcParams['figure.figsize'] = (10.0, 8.0)
 import seaborn as sns
@@ -61,10 +62,12 @@ sns.plt.show()
 temp = round(dAgg_df.index.get_level_values('time').unique().values.size/10) #All dates
 all_dates = dAgg_df.index.get_level_values('time').unique().values
 all_dates.sort()
-train_dates = all_dates[38:9*temp] #Will be used to loop over dates when training..
+train_dates = all_dates[38:9*temp] 
+test_dates = all_dates[9*temp:10*temp]
 del temp
 train_df = dAgg_df.iloc[np.logical_and(train_dates.max()>=dAgg_df.index.get_level_values('time'),
                         dAgg_df.index.get_level_values('time')>=train_dates.min())] #training set
+test_df = dAgg_df.iloc[dAgg_df.index.get_level_values('time')>=test_dates.min()] #training set
 miss = train_df.isnull().sum()/len(train_df)
 #Visualization
 miss = miss[miss > 0]
@@ -111,11 +114,15 @@ train_variables.insert(len(train_variables),'sms')
 train_variables.insert(len(train_variables),'call')
 train_variables.insert(len(train_variables),'mood')
 train_df = train_df[train_variables]
+test_df = test_df[train_variables]
 #Remaining Missing Values
 #Approach 1: fill all missing values of the remaining Vs. with corresponding medians
 for i in list(set(corr_var).intersection(miss_var)):
-    bin_data[i].fillna(np.nanmedian(bin_data[i].values), inplace=True)
-bin_data['mood'].fillna(np.nanmedian(bin_data['mood'].values), inplace=True)
+    train_df[i].fillna(np.nanmedian(train_df[i].values), inplace=True)
+    test_df[i].fillna(np.nanmedian(test_df[i].values), inplace=True)
+    
+train_df['mood'].fillna(np.nanmedian(train_df['mood'].values), inplace=True)
+test_df['mood'].fillna(np.nanmedian(test_df['mood'].values), inplace=True)
 
 #Binary Data Analysis
 #Pivot tables: to provide argument in favor of any behavior
@@ -144,7 +151,48 @@ k = anova(bin_data)
 train_variables = list(set(corr_var).intersection(miss_var))
 train_variables.insert(len(train_variables),'mood')
 train_df = train_df[train_variables]
+test_df = test_df[train_variables]
 
-###Feature Engineering###
+###Transform Numeric Variables###
+#Reduce length of tails: Check skewnes using log(x + 1)
+from scipy.stats import skew
+skewed = train_df.apply(lambda x: skew(x.dropna().astype(float)))
+skewed = skewed[skewed > 0.75]
+skewed = skewed.index
+train_df[skewed] = np.log1p(train_df[skewed])
+test_df[skewed] = np.log1p(test_df[skewed])
+del test_df['mood']
+
+#Standardize
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+scaler.fit(train_df)
+scaled = scaler.transform(train_df)
+for i, col in enumerate(train_df.columns):
+       train_df[col] = scaled[:,i]
+
+numeric_features = list(train_df.columns)
+numeric_features.remove('mood')
+scaled = scaler.fit_transform(test_df[numeric_features])
+for i, col in enumerate(numeric_features):
+      test_df[col] = scaled[:,i]       
+       
 
 ###Model Training & Evaluation###
+#create a label set (for later)
+label_df = pd.DataFrame(index = train_df.index, columns = ['mood'])
+label_df['mood'] = np.log(train_df['mood'])
+#Improve parameter selection by performing cross-validation!
+regr = xgb.XGBRegressor(colsample_bytree=0.2,
+                       gamma=0.0,
+                       learning_rate=0.05,
+                       max_depth=6,
+                       min_child_weight=1.5,
+                       n_estimators=7200,
+                       reg_alpha=0.9,
+                       reg_lambda=0.6,
+                       subsample=0.2,
+                       seed=42,
+                       silent=1)
+
+regr.fit(train_df, label_df)      
