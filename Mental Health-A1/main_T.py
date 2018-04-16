@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import datetime
-import xgboost as xgb
+
 
 plt.rcParams['figure.figsize'] = (10.0, 8.0)
 import seaborn as sns
@@ -17,13 +17,10 @@ from scipy import stats
 from scipy.stats import norm
 
 #loading data
-dataset = pd.read_csv("Data/dataset_mood_smartphone.csv")
+dataset = pd.read_csv('Data/dataset_mood_smartphone.csv')
 #dataset['time'] = pd.to_datetime(dataset['time'], format = '%Y%m%D', errors = 'coerce') #convert dates to datetime object (or a series), seems to miscreate 'datetime'
 dataset['time'] = pd.to_datetime(dataset['time'])
 variables = dataset['variable'].unique()
-
-#Missing values? 
-dataset['variable'].isnull().any()
 
 #Aggregation to daily average 
 dataset = pd.DataFrame(dataset)
@@ -35,8 +32,8 @@ sns.distplot(dAgg[:,'mood',:]) #Left-skewed distribution.
 
 #Missing Value Analysis
 dAgg_df = dAgg[:,:,:].unstack(level = 1)
-#Binnary Variables -> Assumption 1: phones tracked as of 02-17. Hence, no missing variables
-#for 'call' or 'sms', i.e. if NaN, then set to 0. 
+#Binnary Variables
+#Observation 1: Users can start at differnt times
 bin_data = ['sms', "call"]
 dAgg_df['call'] = dAgg_df['call'].fillna(value = 0)
 dAgg_df['sms'] = dAgg_df['sms'].fillna(value = 0)
@@ -67,6 +64,20 @@ test_dates = all_dates[9*temp:10*temp]
 del temp
 train_df = dAgg_df.iloc[np.logical_and(train_dates.max()>=dAgg_df.index.get_level_values('time'),
                         dAgg_df.index.get_level_values('time')>=train_dates.min())] #training set
+#Observation 1: There are some users that stop usage before end of training date and 
+#               some that start after begin of training date.
+#Observation 2: Keeping these users in dataset creates missing values in the future.
+#Observation 3: Also test set would consist of missing values. 
+#Action: Remove users that do not have complete observations during training period.
+co_users = list()
+for i in list(train_df.index.get_level_values('id').unique().values):
+    temp = train_df.iloc[train_df.index.get_level_values('id') == i] #look for users
+    if temp.index.get_level_values('time').values.max() == train_dates.max() and temp.index.get_level_values('time').values.min() == train_dates.min():
+        co_users.append(i)
+train_df = train_df.loc[co_users]
+#Observation 1: Users in test set can drop out during testing period
+#Action: Test the strategy for the remaining users separetely! Performance of the 
+#       calibration should be determined by the average RMSE accross users.    
 test_df = dAgg_df.iloc[dAgg_df.index.get_level_values('time')>=test_dates.min()] #training set
 miss = train_df.isnull().sum()/len(train_df)
 #Visualization
@@ -115,14 +126,18 @@ train_variables.insert(len(train_variables),'call')
 train_variables.insert(len(train_variables),'mood')
 train_df = train_df[train_variables]
 test_df = test_df[train_variables]
+#Visualize
+nd = pd.melt(train_df, value_vars = train_variables)
+n1 = sns.FacetGrid (nd, col='variable', col_wrap=4, sharex=False, sharey = False)
+n1 = n1.map(sns.distplot, 'value')
+n1
 #Remaining Missing Values
 #Approach 1: fill all missing values of the remaining Vs. with corresponding medians
 for i in list(set(corr_var).intersection(miss_var)):
     train_df[i].fillna(np.nanmedian(train_df[i].values), inplace=True)
-    test_df[i].fillna(np.nanmedian(test_df[i].values), inplace=True)
     
 train_df['mood'].fillna(np.nanmedian(train_df['mood'].values), inplace=True)
-test_df['mood'].fillna(np.nanmedian(test_df['mood'].values), inplace=True)
+#Note: test set missing values are not filled. Forecast each user separately.
 
 #Binary Data Analysis
 #Pivot tables: to provide argument in favor of any behavior
@@ -154,45 +169,69 @@ train_df = train_df[train_variables]
 test_df = test_df[train_variables]
 
 ###Transform Numeric Variables###
-#Reduce length of tails: Check skewnes using log(x + 1)
-from scipy.stats import skew
-skewed = train_df.apply(lambda x: skew(x.dropna().astype(float)))
-skewed = skewed[skewed > 0.75]
-skewed = skewed.index
-train_df[skewed] = np.log1p(train_df[skewed])
-test_df[skewed] = np.log1p(test_df[skewed])
-del test_df['mood']
-
 #Standardize
 from sklearn.preprocessing import StandardScaler
 scaler = StandardScaler()
-scaler.fit(train_df)
-scaled = scaler.transform(train_df)
-for i, col in enumerate(train_df.columns):
-       train_df[col] = scaled[:,i]
+#scaler.fit(train_df[train_variables])
+#scaled = scaler.transform(train_df[train_variables])
+#for i, col in enumerate(train_variables):
+#       train_df[col] = scaled[:,i]
 
-numeric_features = list(train_df.columns)
-numeric_features.remove('mood')
-scaled = scaler.fit_transform(test_df[numeric_features])
-for i, col in enumerate(numeric_features):
-      test_df[col] = scaled[:,i]       
-       
 
 ###Model Training & Evaluation###
 #create a label set (for later)
 label_df = pd.DataFrame(index = train_df.index, columns = ['mood'])
-label_df['mood'] = np.log(train_df['mood'])
-#Improve parameter selection by performing cross-validation!
-regr = xgb.XGBRegressor(colsample_bytree=0.2,
-                       gamma=0.0,
-                       learning_rate=0.05,
-                       max_depth=6,
-                       min_child_weight=1.5,
-                       n_estimators=7200,
-                       reg_alpha=0.9,
-                       reg_lambda=0.6,
-                       subsample=0.2,
-                       seed=42,
-                       silent=1)
+label_df['mood'] = train_df['mood']
 
-regr.fit(train_df, label_df)      
+#Improve parameter selection by performing cross-validation!
+from sklearn.metrics import mean_squared_error
+def rmse(y_test,y_pred):
+      return np.sqrt(mean_squared_error(y_test,y_pred))
+
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.wrappers.scikit_learn import KerasRegressor
+from sklearn.preprocessing import StandardScaler
+
+np.random.seed(10)
+
+#create Model
+#define base model
+def base_model():
+     model = Sequential()
+     model.add(Dense(20, input_dim=6, init='normal', activation='relu'))
+     model.add(Dense(10, init='normal', activation='relu'))
+     model.add(Dense(1, init='normal'))
+     model.compile(loss='mean_squared_error', optimizer = 'adam')
+     return model
+
+seed = 7
+np.random.seed(seed)
+
+scale = StandardScaler()
+X_train = scale.fit_transform(train_df)
+
+keras_label = label_df.as_matrix()
+clf = KerasRegressor(build_fn=base_model, nb_epoch=1000, batch_size=5,verbose=0)
+clf.fit(X_train,keras_label)
+
+#make predictions
+for i in list(set(corr_var).intersection(miss_var)):
+    test_df[i].fillna(np.nanmedian(test_df[i].values), inplace=True)
+
+train_variables1 = train_variables
+train_variables1.remove('mood')
+scaled = scaler.fit_transform(test_df[train_variables1])
+
+for i, col in enumerate(train_variables1):
+      test_df[col] = scaled[:,i]
+      
+test_df1 = test_df
+del test_df1['mood']
+
+X_test = scale.fit_transform(test_df.iloc[test_df1.index.get_level_values('id') == 'AS14.33'])
+kpred = clf.predict(X_test) 
+kpred = np.exp(kpred)
+
+pred_df = pd.DataFrame(kpred, index=test_df["id"], columns=["mood"]) 
+pred_df.to_csv('keras1.csv', header=True, index_label='Id')    
