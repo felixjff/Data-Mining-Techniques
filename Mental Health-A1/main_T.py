@@ -2,14 +2,13 @@
 """
 Created on Wed Apr 11 22:11:05 2018
 
-@author: Felix Jose Farias Fueyo
+@author: Felix Farias Fueyo
 """
 #Loading libraries 
 import numpy as np 
 import pandas as pd
 import matplotlib.pyplot as plt
 import datetime
-
 
 plt.rcParams['figure.figsize'] = (10.0, 8.0)
 import seaborn as sns
@@ -79,6 +78,7 @@ train_df = train_df.loc[co_users]
 #Action: Test the strategy for the remaining users separetely! Performance of the 
 #       calibration should be determined by the average RMSE accross users.    
 test_df = dAgg_df.iloc[dAgg_df.index.get_level_values('time')>=test_dates.min()] #training set
+test_df = test_df.loc[co_users]
 miss = train_df.isnull().sum()/len(train_df)
 #Visualization
 miss = miss[miss > 0]
@@ -163,75 +163,37 @@ def anova(frame):
 k = anova(bin_data)
 #Observation 1: Variables are not significant at the 0.01 or 0.05 confidence level.
 #Action 1: Remove sms and call from data set.
-train_variables = list(set(corr_var).intersection(miss_var))
-train_variables.insert(len(train_variables),'mood')
-train_df = train_df[train_variables]
-test_df = test_df[train_variables]
+if k['pval'][1] > 0.05 and k['pval'][0] > 0.05:
+    train_variables = list(set(corr_var).intersection(miss_var))
+    train_variables.insert(len(train_variables),'mood')
+    train_df = train_df[train_variables]
+    test_df = test_df[train_variables]
 
-###Transform Numeric Variables###
+
+'''Transform Numeric Variables'''
 #Standardize
 from sklearn.preprocessing import StandardScaler
 scaler = StandardScaler()
-#scaler.fit(train_df[train_variables])
-#scaled = scaler.transform(train_df[train_variables])
-#for i, col in enumerate(train_variables):
-#       train_df[col] = scaled[:,i]
+scaler.fit(train_df[train_variables])
+scaled = scaler.transform(train_df[train_variables])
+for i, col in enumerate(train_variables):
+    train_df[col] = scaled[:,i]
 
 
-###Model Training & Evaluation###
-#create a label set (for later)
-label_df = pd.DataFrame(index = train_df.index, columns = ['mood'])
-label_df['mood'] = train_df['mood']
 
-#Improve parameter selection by performing cross-validation!
-from sklearn.metrics import mean_squared_error
-def rmse(y_test,y_pred):
-      return np.sqrt(mean_squared_error(y_test,y_pred))
+'''Model Training & Evaluation'''
+#from sklearn.metrics import mean_squared_error
+#from sklearn.preprocessing import StandardScaler
 
-from keras.models import Sequential
-from keras.layers import Dense
-from keras.wrappers.scikit_learn import KerasRegressor
-from sklearn.preprocessing import StandardScaler
+#Predict for each user indipendently. Example for AS14.33
+train_ex = train_df.iloc[train_df.index.get_level_values('id') == 'AS14.33']
 
-np.random.seed(10)
+#Define and train neural network
+from MachineLearning import NeuralNetwork
+neural_network  = NeuralNetwork(dVariable = 'mood', train_set = train_ex, hidden_layers = 1, neurons = 4, activation_function = 'Sigmoid')
+[weights1, wights2] = neural_network.train_network()
+[weights1, wights2] = neural_network.train_network1h()
 
-#create Model
-#define base model
-def base_model():
-     model = Sequential()
-     model.add(Dense(20, input_dim=6, init='normal', activation='relu'))
-     model.add(Dense(10, init='normal', activation='relu'))
-     model.add(Dense(1, init='normal'))
-     model.compile(loss='mean_squared_error', optimizer = 'adam')
-     return model
-
-seed = 7
-np.random.seed(seed)
-
-scale = StandardScaler()
-X_train = scale.fit_transform(train_df)
-
-keras_label = label_df.as_matrix()
-clf = KerasRegressor(build_fn=base_model, nb_epoch=1000, batch_size=5,verbose=0)
-clf.fit(X_train,keras_label)
-
-#make predictions
-for i in list(set(corr_var).intersection(miss_var)):
-    test_df[i].fillna(np.nanmedian(test_df[i].values), inplace=True)
-
-train_variables1 = train_variables
-train_variables1.remove('mood')
-scaled = scaler.fit_transform(test_df[train_variables1])
-
-for i, col in enumerate(train_variables1):
-      test_df[col] = scaled[:,i]
-      
-test_df1 = test_df
-del test_df1['mood']
-
-X_test = scale.fit_transform(test_df.iloc[test_df1.index.get_level_values('id') == 'AS14.33'])
-kpred = clf.predict(X_test) 
-kpred = np.exp(kpred)
-
-pred_df = pd.DataFrame(kpred, index=test_df["id"], columns=["mood"]) 
-pred_df.to_csv('keras1.csv', header=True, index_label='Id')    
+    
+#Use obtained weights to obtain a prediction out-of-sample
+  
