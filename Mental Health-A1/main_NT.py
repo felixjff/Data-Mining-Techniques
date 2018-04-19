@@ -37,13 +37,29 @@ arrays = [id_lvl,var_lvl,time_lvl]
 
 pd.MultiIndex.copy
 
-#create array to be filled with variable scores for <window_size>-days and the target score
-nt_array = np.zeros((dAgg.axes[0].levels[0].size * dAgg.axes[0].levels[1].size * dAgg.axes[0].levels[2].size, 2))
-print(nt_array.shape)
+
+#nt_array = np.zeros((dAgg.axes[0].levels[0].size * dAgg.axes[0].levels[1].size * dAgg.axes[0].levels[2].size, 2))
+
+
 idx = pd.IndexSlice
 window_size = 5
 
-new_usr_array = np.zeros(dAgg.axes[0].levels[0].size * (len(dAgg.axes[0].levels[2]) - window_size) ) #create new_usr_array, with #new_usr = #usr*(days-window_size)
+#create new user array to be filled with variable scores for <window_size>-days and the target score
+size = dAgg.axes[0].levels[0].size
+date_lengths = np.zeros(dAgg.axes[0].levels[0].size)
+i = 0
+for usr in dAgg.axes[0].levels[0]:
+    #np.append(date_lengths, dAgg.loc[usr].count(level = 'time'), axis=0 )
+    date_lengths[i] = dAgg.loc[usr].count(level = 'time').size
+    i+=1
+
+length = len(dAgg.axes[0].levels[2])
+size = (dAgg.size * (len(dAgg.axes[0].levels[2]) - window_size) , 2)
+new_usr_array =  np.zeros(size)
+
+
+#new_usr_array = np.zeros(dAgg.axes[0].levels[0].size * dAgg.axes[0].levels[1].size * (len(dAgg.axes[0].levels[2]) - window_size) ) #create new_usr_array, with #new_usr = #usr*variables*(days-window_size)
+new_usr_array = np.empty
 for usr in dAgg.axes[0].levels[0]: # loop over all users to generate time window data
 	print('usr == == ==', usr)
 
