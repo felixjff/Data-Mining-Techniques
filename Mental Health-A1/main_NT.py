@@ -33,13 +33,17 @@ id_lvl = np.tile(dAgg.axes[0].levels[0],(1, dAgg.axes[0].levels[1].size * dAgg.a
 var_lvl = np.tile(dAgg.axes[0].levels[1],(1,id_lvl.size))
 time_lvl = np.tile(dAgg.axes[0].levels[2],(1,id_lvl.size))
 arrays = [id_lvl,var_lvl,time_lvl]
-mi = pd.MultiIndex.from_arrays(arrays, names=('id', 'variable', 'time'))
+###mi = pd.MultiIndex.from_arrays(arrays, names=('id', 'variable', 'time')) ## Need to be same length? Better Tiling?
 
-#create array to be filled with variable scores for <window_size> and the target score
+pd.MultiIndex.copy
+
+#create array to be filled with variable scores for <window_size>-days and the target score
 nt_array = np.zeros((dAgg.axes[0].levels[0].size * dAgg.axes[0].levels[1].size * dAgg.axes[0].levels[2].size, 2))
 print(nt_array.shape)
 idx = pd.IndexSlice
 window_size = 5
+
+new_usr_array = np.zeros(dAgg.axes[0].levels[0].size * (len(dAgg.axes[0].levels[2]) - window_size) ) #create new_usr_array, with #new_usr = #usr*(days-window_size)
 for usr in dAgg.axes[0].levels[0]: # loop over all users to generate time window data
 	print('usr == == ==', usr)
 
