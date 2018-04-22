@@ -24,10 +24,6 @@ variables = dataset['variable'].unique()
 #Aggregation to daily average 
 dataset = pd.DataFrame(dataset)
 dAgg = dataset.groupby(['id', 'variable', dataset['time'].dt.date])['value'].mean() #hierarchical grouping: id > time > variable, averaging the values of the variable. Seems to lose the exact date information
-print(dAgg.head(3000)) #to check grouping and values
-
-#Distribution: target variable (assuming no missing values)
-sns.distplot(dAgg[:,'mood',:]) #Left-skewed distribution.
 
 #Missing Value Analysis
 dAgg_df = dAgg[:,:,:].unstack(level = 1)
@@ -37,7 +33,14 @@ bin_data = ['sms', "call"]
 dAgg_df['call'] = dAgg_df['call'].fillna(value = 0)
 dAgg_df['sms'] = dAgg_df['sms'].fillna(value = 0)
 #Numeric Variables -> Given A1, any NaN as of 02-17 is a missing value of a given variable
+#Observation 1: Duration variables are only recoded if user enters app.
+#   Hence, if user does not enter app NaN is obtained. However, this is equivalent
+#   to a duration of 0. Hence, duration NaNs are replaced by 0.
 num_data = dAgg_df.columns
+duration_data = list([s for s in num_data if "app" in s])
+duration_data.append('screen')
+for i in duration_data:
+    dAgg_df[i] = dAgg_df[i].fillna(value = 0)
 num_data = num_data[np.logical_and('sms' != num_data,'call' != num_data)]
 miss = dAgg_df.isnull().sum()/len(dAgg_df)
 #Visualization
@@ -55,12 +58,13 @@ sns.plt.show()
 #Observation 1: Trade-off between time window and missing values. 
 #Observation 2: Most missing values at the begining of the observation period.
 #Action: Start observation period as of date 2014-03-27
-temp = round(dAgg_df.index.get_level_values('time').unique().values.size/10) #All dates
+temp = round(dAgg_df.index.get_level_values('time').unique().values.size/12) #All dates
 all_dates = dAgg_df.index.get_level_values('time').unique().values
 all_dates.sort()
-train_dates = all_dates[38:9*temp] 
-test_dates = all_dates[9*temp:10*temp]
+train_dates = all_dates[30:9*temp] 
+test_dates = all_dates[9*temp:12*temp]
 del temp
+dAgg_df['mood_MA'] = pd.rolling_mean(dAgg_df['mood'],14,1)
 train_df = dAgg_df.iloc[np.logical_and(train_dates.max()>=dAgg_df.index.get_level_values('time'),
                         dAgg_df.index.get_level_values('time')>=train_dates.min())] #training set
 #Observation 1: There are some users that stop usage before end of training date and 
@@ -81,14 +85,14 @@ test_df = dAgg_df.iloc[dAgg_df.index.get_level_values('time')>=test_dates.min()]
 test_df = test_df.loc[co_users]
 miss = train_df.isnull().sum()/len(train_df)
 #Visualization
-miss = miss[miss > 0]
 miss.sort_values(inplace=True)
 miss = miss.to_frame()
 miss.columns = ['count']
 miss.index.names = ['Name']
 miss['Name'] = miss.index
+miss1 = miss[miss > 0]
 sns.set(style="whitegrid", color_codes=True)
-sns.barplot(x = 'Name', y = 'count', data=miss)
+sns.barplot(x = 'Name', y = 'count', data=miss1)
 plt.xticks(rotation = 90)
 sns.plt.show()
 #Interpretation: Significant improvement. 
@@ -119,7 +123,7 @@ sns.plt.show()
 #Action 2: Remove c2. (This should be discussed with the TA! Potentially important, but 
 #          extremely many NAs, recommendations?)
 miss_var = miss[miss['count']<0.60]['Name'].values.tolist()
-corr_var = corr_mood[abs(corr_mood['correlation'])>0.05]['Name'].values.tolist()
+corr_var = corr_mood[abs(corr_mood['correlation'])>0.2]['Name'].values.tolist()
 train_variables = list(set(corr_var).intersection(miss_var))
 train_variables.insert(len(train_variables),'sms')
 train_variables.insert(len(train_variables),'call')
@@ -172,28 +176,88 @@ if k['pval'][1] > 0.05 and k['pval'][0] > 0.05:
 
 '''Transform Numeric Variables'''
 #Standardize
+train_variables1 = train_variables
+train_variables1.remove('mood')
 from sklearn.preprocessing import StandardScaler
 scaler = StandardScaler()
-scaler.fit(train_df[train_variables])
-scaled = scaler.transform(train_df[train_variables])
-for i, col in enumerate(train_variables):
+scaler.fit(train_df[train_variables1])
+scaled = scaler.transform(train_df[train_variables1])
+for i, col in enumerate(train_variables1):
     train_df[col] = scaled[:,i]
+    
+for i in list(set(corr_var).intersection(miss_var)):
+    test_df[i].fillna(np.nanmedian(test_df[i].values), inplace=True)    
+    test_df['mood'].fillna(np.nanmedian(test_df['mood'].values), inplace=True)
 
-
+scaler.fit(test_df[train_variables1])
+scaled = scaler.transform(test_df[train_variables1])
+for i, col in enumerate(train_variables1):
+    test_df[col] = scaled[:,i]
 
 '''Model Training & Evaluation'''
 #from sklearn.metrics import mean_squared_error
 #from sklearn.preprocessing import StandardScaler
 
 #Predict for each user indipendently. Example for AS14.33
-train_ex = train_df.iloc[train_df.index.get_level_values('id') == 'AS14.33']
-
-#Define and train neural network
 from MachineLearning import NeuralNetwork
-neural_network  = NeuralNetwork(dVariable = 'mood', train_set = train_ex, hidden_layers = 1, neurons = 4, activation_function = 'Sigmoid')
-[weights1, wights2] = neural_network.train_network()
-[weights1, wights2] = neural_network.train_network1h()
+from MachineLearning import NeuronLayer
+np.random.seed(1)
+#Define and train neural network
+neurons1 = 3
+neurons2 = 1
+layer1 = NeuronLayer(neurons1, len(train_df.columns)-1)
+layer2 = NeuronLayer(neurons2, neurons1)
+#Observation 1: ReLu's gradient drives the network's weights to explode. 
+#Action: Use Sigmoid, which has much ower gradient values.
+activation_function = 'ReLu'
+#print("Stage 1) Random starting synaptic weights: ")
+#neural_network.print_weights()
 
-    
-#Use obtained weights to obtain a prediction out-of-sample
-  
+#Initialize matrix to store performance out of sample
+performance_rmse = np.zeros((len(test_df.index.get_level_values('id').unique()),2))
+performance_rmse = pd.DataFrame(performance_rmse)
+performance_rmse.columns = ['Neural Network', 'Benchmark']
+performance_rmse.index.names = ['Patient']
+performance_rmse['Patient'] = test_df.index.get_level_values('id').unique()
+performance_mad = np.zeros((len(test_df.index.get_level_values('id').unique()),2))
+performance_mad = pd.DataFrame(performance_mad)
+performance_mad.columns = ['Neural Network', 'Benchmark']
+performance_mad.index.names = ['Patient']
+performance_mad['Patient'] = test_df.index.get_level_values('id').unique()
+
+for i in test_df.index.get_level_values('id').unique():
+    train_ex = train_df.iloc[train_df.index.get_level_values('id') == i]
+    #Train network to predict one day ahead of time fitting aX_t = y_{t+1}
+    train_ex['mood'] = train_ex['mood'].shift(-1)
+    train_ex = train_ex.drop(train_ex.index[len(train_ex)-1])
+    neural_network = NeuralNetwork(layer1, layer2, activation_function)
+    neural_network.train(train_ex.drop('mood', 1), np.matrix(train_ex['mood']).T, 30000)
+
+    #print("Stage 2) Trained synaptic weights: ")
+    #neural_network.print_weights()
+
+    test_ex = test_df.iloc[test_df.index.get_level_values('id') == i]
+    #Drop last row, as there is no value of mood available at T+1
+    test_ex['mood'] = test_ex['mood'].shift(-1)
+    test_ex = test_ex.drop(test_ex.index[len(test_ex)-1])
+    hidden_state, output = neural_network.think(test_ex.drop('mood', 1))
+
+    #Performance out-of-sample
+    #RMSE
+    nn_rmse = neural_network.rmse(output, test_ex['mood'])
+    performance_rmse.loc[performance_rmse['Patient'] == i, 'Neural Network'] = nn_rmse
+    #MAD
+    nn_mad = neural_network.mad(output, test_ex['mood'])
+    performance_mad.loc[performance_mad['Patient'] == i, 'Neural Network'] = nn_mad
+
+    #Benchmark to outperfrom: median of historical values 
+    benchmark = np.ones((len(test_ex['mood']),1)) * train_ex['mood'].median()
+    #RMSE
+    ben_rmse = neural_network.rmse(benchmark, test_ex['mood'])
+    performance_rmse.loc[performance_rmse['Patient'] == i, 'Benchmark'] = ben_rmse
+    #MAD
+    ben_mad = neural_network.mad(benchmark, test_ex['mood'])
+    performance_mad.loc[performance_mad['Patient'] == i, 'Benchmark'] = ben_mad
+
+sum(performance_rmse['Neural Network'] > performance_rmse['Benchmark'])/len(performance_rmse)
+sum(performance_mad['Neural Network'] > performance_mad['Benchmark'])/len(performance_mad)
