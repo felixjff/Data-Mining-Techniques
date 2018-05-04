@@ -1,0 +1,72 @@
+--- Filling Missing Values ---
+
+visitor_hist_starring & visitor_hist_adr_usd
+
+	You: "NA = 0"
+	My opinion: Given the amount of missing histories (~95%), setting NA = 0 will
+	lead non-zero histories to be treated as "noise". Their explanatory power 
+	will be lost. 
+	Alternative: Determine if the history is worth being kept as follows.
+		1. For all obs, compute:
+			starrating_diff = |visitor_hist_starrating - prop_starrating|
+			usd_diff = |log(visitor_hist_adr_usd) - log(price_usd)|
+
+			*Note, this results in two variables with values in ranges [0,5] and [0,10] or being NA.
+		2. Transform numerical variables, into categorical variables
+			[0,5] -> 1: 0<abs(diff)<1 ; 2: 2<abs(diff)<3, ...
+			[0,1] -> 1: 0<abs(diff)<0.1 ; 2...
+		3. Create 4 plots
+			Plot 1: (y-axis: %hotels booked, x-axis: price diff. category + category for NAs)
+			Plot 2: (y-axis: %hotels clicked, x-axis: price diff. category + category for NAs)
+			Plot 3... Plot 4...
+		4. From the plots we should be able to see if history is important on booking
+		(low difference, should implied higher booking/clicking %s!).
+		5. If above holds, then highlight matching/mismatching between historical data and given hotel data
+		using a categorical variable:
+			match_price = 2 if small difference (say top 2 categories of usd_diff); 
+				      1 if large difference (say bottom two categories " "); 
+				      0 if neither large nor small and NA
+	
+	ALEX'S SECOND OPINION: I am not sure how this translates in to replacing the NA variables for the above features. I think this is more feature engineering. I can't see how processing the NA values in this way will lead to us being able to replace the variables in an intelligent way. I suspect that as most of the users do not have a history (and thus have an NA in the features) then there will be a wide range of bookings of hotels with different prices and star-ratings. Therefore, as you mentioned, you will probably just see noise coming from these observations. Also, these plots do not make sense for the NA values as, from what I understand, they rely on having a user's history. I think we will just end up with a NA column on the x-axis of every graph which just shows the average of the entire dataset due to the fact that most of the values are NA (as you said, around 95%). I may have misunderstood you here of course too...
+			
+	
+	
+prop_review_score & prop_location_score2 & srch_query_affinity_score
+	You: NULL = 0
+	My Opinion: Implicitly assumes there is no reviews for missing observations.
+	Alternative: Determine if we can use observed user behavior to fill in this values better:
+		1. For each of the variables plot the % booking/clicking (y-axis) against NA or not NA (x-axis). 
+		2. If % booking is always larger for not NAs, then users dislike hotels with missing reviews, location scores, etc.
+		3. Based on argument 2. fill-in missing values as worse case scenario for the variables, say 1-star rating, instead of 0. 
+
+	ALEX'S SECOND OPINION: This approach seems to make sense for the review score, although I am sceptical that it will turn out like this, i.e. if the non NA values will always be higher that NA values. I would like the data to prove me wrong! 
+
+For the srch_query_affinity_score a NA=0 does not make sense, you are correct. As Log(1) = 0 by setting the NA values to 0 we are assuming that they will certainly be clicked on in an internet search. When the NA value actually means they were not found in an internet search. This was an initial oversight by me! As the Log(0) = -(infinity) perhaps it would be an idea to set the NA values to slightly less than the lowest non-NA value. There is probably a better approach than this though...
+
+For the prop_location_score variables I believe we could do something different. We could see if there is a correlation between the two prop_location_score variables, and if one of these if NA per observation then it may be that we can infer the other from that. 
+If this is not the case, or both values are NA for an observation then I think for each NA property we should plot the %booking/clicking and compare this to other hotels of the same %booking/clicking which do not have NA values. From this we should able to infer a reasonable location score, i.e. it would be the same as saying hotels with the same %booking/clicking have the same prop_location_score. Would that make sense?
+
+promotion_flag
+	You: Null = 0
+	My Opinion: Ok
+
+orig_destination_distance
+	You: Null = -1
+	My opinion: Ok
+
+comparison variables
+	You: Onehotencoding
+	My Opinion: Reasonable, but could first do a simple analysis to see if these variables are important. 
+		1. Divide sample into the categories of competitor variables, i.e. 1, 0, -1 and NAs.
+		2. For each variable bar-plot the % bookings/clicks (y-axis) within category (x-axis). 
+		3. If there is no pattern, say all bars in the plot are at the same level, then no special explanatory power from price diffs./availability at competitors. This is equivalent to setting all missing observations equal to zero (NA = 0).
+
+	ALEX'S SECOND OPINION: Seems good to me.
+
+Gross_booking_usd
+	You: NA = 0
+	My Opinion: Ok
+
+
+
+	
