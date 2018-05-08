@@ -1,0 +1,9 @@
+-----FEATURE EXTRACTION-----
+
+Below some features are described which can be added to the dataset.
+
+1. Averages of different features over the srch_id, prop_id, srch_destination_id.
+2. Price difference from previous hotel price and current price.
+3. Price order - the order of the pricing of the hotel with respect to srch_id.
+4. Hotel position - the position of the hotel in the same destination in previous and next searches. Average of these.
+5. Hotel quality - Booking number divided by number of times the hotel appears, per prop_id. Same for clicked number.
