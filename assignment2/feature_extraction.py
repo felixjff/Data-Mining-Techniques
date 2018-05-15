@@ -9,6 +9,7 @@ with open('data/training_set_VU_DM_2014.csv', 'r') as csvfile:
 price_difference_series = train.set_index(['date_time']).sort_index().groupby(['prop_id']).apply(lambda x: x.price_usd.diff()).reset_index()
 train = train.sort_values(['prop_id','date_time']).reset_index(drop=True)
 train['price_difference'] = price_difference_series.price_usd
+train['price_difference'] = train['price_difference'].fillna(0)
 
 ##HOTEL QUALITY##
 #number of times each prop_id has been booked
@@ -36,6 +37,7 @@ train = train.reset_index()
 hotel_position_series = train.set_index(['date_time']).sort_index().groupby(['prop_id']).apply(lambda x: x.position.rolling(window=3, center=True).mean()).reset_index()
 train = train.sort_values(['prop_id','date_time']).reset_index(drop=True)
 train['hotel_position_avg'] = hotel_position_series.position
+train['hotel_position_avg'] = train['hotel_position_avg'].fillna(-1)
 
 ##PRICE RANK##
 #order of the price within srch_id
