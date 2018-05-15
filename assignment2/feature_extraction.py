@@ -52,4 +52,7 @@ train['star_rank'] = train.groupby(['srch_id'])['prop_starrating'].rank()
 #I.e. if a property reduces in price between searches this is ranked high
 train['price_difference_rank'] = train.groupby(['prop_id'])['price_difference'].rank()
 
+##Monotonic Property Star Rating 
+train['prop_starrating_monotonic'] = abs(train.prop_starrating - np.mean(train.loc[train['booking_bool'] == 1].prop_starrating))
+
 train.to_csv('data/feature_extraction/training_set_VU_DM_2014.csv')
