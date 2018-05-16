@@ -17,14 +17,19 @@ from scipy import stats
 from scipy.stats import norm
 
 #loading data
-dataset = pd.read_csv('Data/training_set_VU_DM_2014.csv')
+testing = 0
+if testing == 0:
+    dataset = pd.read_csv('Data/feature_extraction/training_set_VU_DM_2014.csv')
+else:
+    dataset = pd.read_csv('Data/feature_extraction/test_set_VU_DM_2014.csv')
+
 
 ''' Missing Value Analysis '''
 ## Start: Visitor History ##
 dataset['starrating_diff'] = 0
 dataset['usd_diff'] = 0
 dataset['starrating_diff'] = abs(dataset['visitor_hist_starrating'] - dataset['prop_starrating'])
-dataset.loc[dataset['visitor_hist_adr_usd'] == 0, 'visitor_hist_adr_usd'] = 0
+dataset.loc[dataset['visitor_hist_adr_usd'] == 0, 'visitor_hist_adr_usd'] = math.nan
 dataset['usd_diff'] = abs(np.log10(dataset['visitor_hist_adr_usd']) - np.log10(dataset['price_usd']))
 
 pct_usd = pd.DataFrame(np.zeros((11,2))) #10 categories plus NAs

@@ -1,8 +1,21 @@
 import numpy as np
 import pandas as pd
 
-with open('data/training_set_VU_DM_2014.csv', 'r') as csvfile:
-    train = pd.read_csv(csvfile)
+testing = 0
+if testing == 0:
+    with open('data/training_set_VU_DM_2014.csv', 'r') as csvfile:
+        sample = pd.read_csv(csvfile)
+else:
+    with open('data/test_set_VU_DM_2014.csv', 'r') as csvfile:
+        sample = pd.read_csv(csvfile)
+
+##Decrease Sample Size##
+np.random.seed(10)
+
+train_srch_id = np.random.choice(a = sample.srch_id.unique(), size = round(len(sample.srch_id.unique())*0.70), replace = False)
+train = sample[pd.Series(sample.srch_id).isin(train_srch_id)]
+del sample
+del train_srch_id
 
 ##PRICE DIFFERENCE##
 #difference in current search price to previous search price
@@ -13,24 +26,18 @@ train['price_difference'] = train['price_difference'].fillna(0)
 
 ##HOTEL QUALITY##
 #number of times each prop_id has been booked
-booking_series = train.groupby(['booking_bool']).get_group(1).groupby(['prop_id']).count().booking_bool
-booking_series_not = train.groupby(['booking_bool']).get_group(0).groupby(['prop_id']).count().booking_bool
-prop_id_never_booked = booking_series_not.index.difference(booking_series.index)
-prop_id_never_booked_series = pd.Series(np.ones(prop_id_never_booked.shape), index=prop_id_never_booked)
-total_booking_series = booking_series.append(prop_id_never_booked_series)
+booking_series = train.groupby(['prop_id']).sum().booking_bool
+booking_series = booking_series + 1
 
 #number of times each prop_id has been clicked
-click_series = train.groupby(['click_bool']).get_group(1).groupby(['prop_id']).count().click_bool
-click_series_not = train.groupby(['booking_bool']).get_group(0).groupby(['prop_id']).count().click_bool
-prop_id_never_clicked = click_series_not.index.difference(click_series.index)
-prop_id_never_clicked_series = pd.Series(np.ones(prop_id_never_clicked.shape), index=prop_id_never_clicked)
-total_clicking_series = click_series.append(prop_id_never_clicked_series)
+click_series = train.groupby(['prop_id']).sum().click_bool
+click_series = click_series + 1
 
 #number of times each prop_id has appeared in all searches
 count_series = train.groupby(['prop_id']).count().srch_id
 
-hotel_quality_booking = total_booking_series.divide(count_series)
-hotel_quality_click = total_clicking_series.divide(count_series)
+hotel_quality_booking = booking_series.divide(count_series)
+hotel_quality_click = click_series.divide(count_series)
 
 #append the hotel quality to the train dataframe
 train = train.set_index(['prop_id']).sort_index()

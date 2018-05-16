@@ -19,27 +19,52 @@ from scipy import stats
 from scipy.stats import norm
 
 #loading data
-dataset = pd.read_csv('data/feature_extraction/training_set_VU_DM_2014.csv')
+testing = 0
+if testing == 0:
+    train = pd.read_csv('data/MissingValueAnalysis/training_set_VU_DM_2014.csv')
+else:
+    train = pd.read_csv('Data/MissingValueAnalysis/test_set_VU_DM_2014.csv')
+
+train = train.drop(['comp2_rate', 'comp2_inv','comp4_rate_percent_diff', 'comp5_rate', 'comp5_inv',
+                    'comp3_rate', 'comp3_inv', 'comp5_rate_percent_diff', 'comp6_rate', 'comp6_inv',
+                    'comp4_rate', 'comp4_inv', 'comp6_rate_percent_diff', 'comp7_rate', 'comp7_inv',
+                    'comp7_rate_percent_diff', 'comp8_rate', 'comp8_inv',
+                    'comp8_rate_percent_diff'], axis = 1)
+
+#np.random.seed(10)
+
+#train_srch_id = np.random.choice(a = train.srch_id.unique(), size = round(len(train.srch_id.unique())*0.70), replace = False)
+#train = train[pd.Series(train.srch_id).isin(train_srch_id)]
+#del sample
+#del train_srch_id
+
 
 #Parse date_time to obtain months
-dataset['month'] =  [datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S').month for date in dataset.date_time.values]
+train['month'] =  [datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S').month for date in train.date_time.values]
 
-keys = ['month', 'srch_id', 'visitor_location_country_id', 'prop_country_id', 'srch_destination_id', 
-        'srch_length_of_stay', 'prop_id', 'srch_room_count', 'srch_adult_count', 'srch_children_count']
+keys = ['month', 'srch_id', 'visitor_location_country_id', 'srch_destination_id', 
+        'srch_length_of_stay', 'prop_id']
+#Not included as keys due to memory issues: 'prop_country_id','srch_room_count'
 
-norm_vars = ['prop_starrating_monotinic', 'prop_starrating', 'prop_review_score', 'prop_location_score1', 'prop_location_score2', 
-             'prop_log_historical_price', 'price_usd', 'srch_query_affinity_score', 'orig_desination_distance',
-             'price_difference_rank', 'hotel_position_avg', 'hotel_quality_click', 'hotel_quality_booking',
-             'price_difference']
+std_vars = ['prop_starrating', 'prop_review_score', 'prop_location_score1', 'price_usd', 
+            'srch_query_affinity_score', 'orig_destination_distance', 'price_difference']
 
 #Standardize with respect to each key variable
 from sklearn.preprocessing import scale
 
 for k in keys:
-    for i in norm_vars:
+    for i in std_vars:
         n = i + '_' + k + "std"
-        dataset[n] = math.nan
-        for kv in dataset[k].unique():
-            dataset.loc[dataset[k] == kv, n] = scale(dataset.loc[dataset[k] == kv, i])
+        train[n] = math.nan
+        for kv in train[k].unique():
+            train.loc[train[k] == kv, n] = scale(train.loc[train[k] == kv, i])
+    train = train.drop(k)
+            
+std_vars2 = ['prop_starrating_monotonic', 'prop_location_score2', 
+             'prop_log_historical_price', 'orig_destination_distance', 'price_difference_rank',
+             'hotel_position_avg', 'hotel_quality_click', 'hotel_quality_booking']
+
+for i in std_vars2:
+    train[i] = scale(train[i])
         
 
