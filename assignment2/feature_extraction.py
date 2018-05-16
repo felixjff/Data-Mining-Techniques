@@ -14,15 +14,23 @@ train['price_difference'] = train['price_difference'].fillna(0)
 ##HOTEL QUALITY##
 #number of times each prop_id has been booked
 booking_series = train.groupby(['booking_bool']).get_group(1).groupby(['prop_id']).count().booking_bool
+booking_series_not = train.groupby(['booking_bool']).get_group(0).groupby(['prop_id']).count().booking_bool
+prop_id_never_booked = booking_series_not.index.difference(booking_series.index)
+prop_id_never_booked_series = pd.Series(np.ones(prop_id_never_booked.shape), index=prop_id_never_booked)
+total_booking_series = booking_series.append(prop_id_never_booked_series)
 
 #number of times each prop_id has been clicked
 click_series = train.groupby(['click_bool']).get_group(1).groupby(['prop_id']).count().click_bool
+click_series_not = train.groupby(['booking_bool']).get_group(0).groupby(['prop_id']).count().click_bool
+prop_id_never_clicked = click_series_not.index.difference(click_series.index)
+prop_id_never_clicked_series = pd.Series(np.ones(prop_id_never_clicked.shape), index=prop_id_never_clicked)
+total_clicking_series = click_series.append(prop_id_never_clicked_series)
 
 #number of times each prop_id has appeared in all searches
 count_series = train.groupby(['prop_id']).count().srch_id
 
-hotel_quality_booking = booking_series.divide(count_series)
-hotel_quality_click = click_series.divide(count_series)
+hotel_quality_booking = total_booking_series.divide(count_series)
+hotel_quality_click = total_clicking_series.divide(count_series)
 
 #append the hotel quality to the train dataframe
 train = train.set_index(['prop_id']).sort_index()
@@ -52,7 +60,7 @@ train['star_rank'] = train.groupby(['srch_id'])['prop_starrating'].rank()
 #I.e. if a property reduces in price between searches this is ranked high
 train['price_difference_rank'] = train.groupby(['prop_id'])['price_difference'].rank()
 
-##Monotonic Property Star Rating 
+##Monotonic Property Star Rating
 train['prop_starrating_monotonic'] = abs(train.prop_starrating - np.mean(train.loc[train['booking_bool'] == 1].prop_starrating))
 
 train.to_csv('data/feature_extraction/training_set_VU_DM_2014.csv')
