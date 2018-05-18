@@ -172,4 +172,8 @@ missing_values = []
 for i in dataset.columns.values: 
     missing_values.append([i, len(dataset.loc[dataset[i] == math.nan,i])])
 
-dataset.to_csv('data/MissingValueAnalysis/training_set_VU_DM_2014.csv')
+if testing == 0:
+    dataset.to_csv('data/MissingValueAnalysis/training_set_VU_DM_2014.csv')
+else:
+    dataset.to_csv('data/MissingValueAnalysis/test_set_VU_DM_2014.csv')
+

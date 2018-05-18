@@ -12,7 +12,7 @@ else:
 ##Decrease Sample Size##
 np.random.seed(10)
 
-train_srch_id = np.random.choice(a = sample.srch_id.unique(), size = round(len(sample.srch_id.unique())*0.70), replace = False)
+train_srch_id = np.random.choice(a = sample.srch_id.unique(), size = round(len(sample.srch_id.unique())*0.25), replace = False)
 train = sample[pd.Series(sample.srch_id).isin(train_srch_id)]
 del sample
 del train_srch_id
@@ -70,4 +70,7 @@ train['price_difference_rank'] = train.groupby(['prop_id'])['price_difference'].
 ##Monotonic Property Star Rating
 train['prop_starrating_monotonic'] = abs(train.prop_starrating - np.mean(train.loc[train['booking_bool'] == 1].prop_starrating))
 
-train.to_csv('data/feature_extraction/training_set_VU_DM_2014.csv')
+if testing == 0:
+    train.to_csv('data/feature_extraction/training_set_VU_DM_2014.csv')
+else:
+    train.to_csv('data/feature_extraction/test_set_VU_DM_2014.csv')

@@ -8,6 +8,7 @@ from numpy import exp, random,dot, sqrt, log, array
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import math
 
 #Forecast one output variable for a set of predictors.
 class NeuronLayer:
@@ -55,8 +56,8 @@ class NeuralNetwork:
             
             #When using ReLu it is important to restrict the learning rate, such that the 
             #gradient does not blow-up the optimization.
-            self.layer1.synaptic_weights += 0.00003*layer1_adjustment
-            self.layer2.synaptic_weights += 0.00003*layer2_adjustment
+            self.layer1.synaptic_weights += 0.001*layer1_adjustment
+            self.layer2.synaptic_weights += 0.001*layer2_adjustment
     
     def think(self, inputs):
         if self.activation_function == 'ReLu':
@@ -74,14 +75,48 @@ class NeuralNetwork:
         print( ' Layer 2 : ')
         print( self.layer2.synaptic_weights)
             
-    
-    #def predict(self, weights):
         
     def rmse(self, output, test_set):
         'use self.dVariable and test_set'
         from sklearn.metrics import mean_squared_error
         return sqrt(mean_squared_error(test_set, output))
+    
     def mad(self, output, test_set):
         'use self.dVariable and test_set'
         from sklearn.metrics import mean_absolute_error
         return mean_absolute_error(test_set, output)
+    
+    #test_set should be the realizations of the dependent variable, output should be the estimated values
+    def ndcg(self, result):
+        all_ndcg = pd.DataFrame(result['srch_id'].unique())
+        all_ndcg.columns = ['srch_id']
+        
+        all_ndcg = all_ndcg.set_index('srch_id')
+        result = result.set_index('srch_id')
+        all_ndcg['ndcg'] = math.nan
+        all_ndcg['dcg'] = math.nan
+        
+        result['rel'] = result['booking_bool']*5 + result['click_bool'] #should have 5 as maximum
+        result.loc[result['rel'] == 6, 'rel'] = 5 # 6 can only occure if click and bool are 1. Hence, cap at 5.
+        result.drop(['booking_bool', 'click_bool'], axis = 1)
+        
+        it = 0
+        for i in result.index.unique().values:
+            rel_temp = result.loc[i]  #Extract the search query for which the accuracy will be evaluated
+            rel_temp = rel_temp.sort_values('pred', ascending = False) #Sort the query based on the estimated probabilities
+            
+            irel = rel_temp.sort_values('rel', ascending = False) #compute ideal scenario (highest DCG score)
+            
+            IDCG = 0
+            DCG = 0 #Compute discounted cumulative gain
+            for j in range(1,len(rel_temp)+1):
+                DCG = DCG + (2**rel_temp.iloc[j-1].rel-1)/np.log2(j + 1)
+                IDCG = IDCG + (2**irel.iloc[j-1].rel-1)/np.log2(j + 1)
+            
+            all_ndcg.loc[i, 'ndcg'] = DCG/IDCG  #Compute normalized discounted cumulative gain. (within [0,1] range)
+            all_ndcg.loc[i, 'dcg'] = DCG
+            
+            it = it + 1
+            print(it/len(result.index.unique()))
+            
+        return np.mean(all_ndcg)
