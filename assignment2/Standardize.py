@@ -66,7 +66,7 @@ for k in keys:
 train = train.drop(['month', 'visitor_location_country_id', 'prop_country_id', 'srch_length_of_stay', 'srch_destination_id'], axis = 1)
 train = train.drop(std_vars, axis = 1)
             
-std_vars2 = ['prop_starrating_monotonic', 'prop_log_historical_price', 
+std_vars2 = ['price_rank', 'star_rank', 'prop_starrating_monotonic', 'prop_log_historical_price', 
              'orig_destination_distance', 'price_difference_rank', 'srch_booking_window',
              ]
 

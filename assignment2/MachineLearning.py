@@ -98,7 +98,7 @@ class NeuralNetwork:
         
         result['rel'] = result['booking_bool']*5 + result['click_bool'] #should have 5 as maximum
         result.loc[result['rel'] == 6, 'rel'] = 5 # 6 can only occure if click and bool are 1. Hence, cap at 5.
-        result.drop(['booking_bool', 'click_bool'], axis = 1)
+        result = result.drop(['booking_bool', 'click_bool'], axis = 1)
         
         it = 0
         for i in result.index.unique().values:
@@ -117,6 +117,6 @@ class NeuralNetwork:
             all_ndcg.loc[i, 'dcg'] = DCG
             
             it = it + 1
-            print(it/len(result.index.unique()))
+            print([it/len(result.index.unique()), DCG/IDCG])
             
         return np.mean(all_ndcg)
