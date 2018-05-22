@@ -48,6 +48,13 @@ def ndcg(result):
         sys.stdout.flush()
     return np.mean(all_ndcg)
 
+def prediction_to_output_file(dataframe, outfile_name):
+    dataframe = dataframe.sort_values(['srch_id', 'pred'], ascending=[True, False])
+    output = dataframe[['srch_id', 'prop_id']]
+    output.columns = ['SearchId', 'PropertyId']
+    output.to_csv('predictions/{}.csv'.format(outfile_name), index=False)
+    return None
+
 ''' MODEL CALIBRATION '''
 
 #Open training set
@@ -64,7 +71,7 @@ for i in train.columns:
 train = train.drop(nans, axis = 1) #remove columns with NaNs
 
 #Scale price_rank and star_rank as they where mistakenly not scaled
-train['prince_rank'] = scale(train['price_rank'])
+train['price_rank'] = scale(train['price_rank'])
 train['star_rank'] = scale(train['star_rank'])
 # test['prince_rank'] = scale(test['price_rank'])
 # test['star_rank'] = scale(test['star_rank'])
@@ -113,6 +120,23 @@ m2_rnn= ['price_rank', 'star_rank', 'price_difference_rank',
        'price_difference_srch_length_of_staystd',
        'hotel_position_avg_srch_length_of_staystd'] #Diversification only on explanatory variables
 
+m2_rnn_test = ['price_rank', 'star_rank', 'price_difference_rank',
+       'prop_location_score2_visitor_location_country_idstd',
+       'price_usd_visitor_location_country_idstd',
+       'orig_destination_distance_visitor_location_country_idstd',
+       'price_difference_visitor_location_country_idstd',
+       'prop_starrating_srch_destination_idstd',
+       'prop_review_score_srch_destination_idstd',
+       'prop_location_score1_srch_destination_idstd',
+       'prop_location_score2_srch_destination_idstd',
+       'price_usd_srch_destination_idstd',
+       'orig_destination_distance_srch_destination_idstd',
+       'price_difference_srch_destination_idstd',
+       'srch_length_of_stay_srch_destination_idstd',
+       'prop_location_score2_srch_length_of_staystd',
+       'price_usd_srch_length_of_staystd',
+       'price_difference_srch_length_of_staystd']
+
 m3_rnn= ['prop_brand_bool', 'promotion_flag', 'price_rank', 'star_rank', 'price_difference_rank',
          'prop_starrating_monotonic',  'dummy_starrating_diff_low',
          'dummy_usd_diff_high', 'dummy_usd_diff_low',
@@ -154,16 +178,16 @@ from sklearn.gaussian_process import GaussianProcess
 from sklearn.ensemble import RandomForestClassifier
 from sklearn import svm
 
-# n_trees=300
+n_trees=300
 n_jobs=50
 max_depth=100
 
-rf0 = RandomForestRegressor(n_estimators=n_trees, verbose=2, n_jobs=n_jobs,
-            max_depth=max_depth, random_state=1)
+rf0 = RandomForestRegressor(n_estimators=n_trees, verbose=2, n_jobs=n_jobs, max_depth=max_depth, random_state=1)
 
+
+#INSAMPLE Fit is almost perfect. Hence, will analyze performance out-of-sample.
 rf0.fit(train[m2_rnn], train['booking_click'])
 
-#Insample Fit is almost perfect. Hence, will analyze performance out-of-sample.
 output_rf = rf0.predict(train[m2_rnn])
 result = train[['srch_id','booking_bool', 'click_bool']]
 result = result.assign(pred = output_rf)
@@ -186,8 +210,9 @@ importances.plot.bar()
 
 # Good performance: 0.44 NDCG
 output_rf_out = rf0.predict(test[m2_rnn])
-result = test[['srch_id','booking_bool', 'click_bool']]
+result = test[['prop_id', 'srch_id','booking_bool', 'click_bool']]
 result = result.assign(pred = output_rf_out)
+ndcg_test = ndcg(result)
 
 
 
