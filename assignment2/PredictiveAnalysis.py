@@ -70,12 +70,14 @@ for i in train.columns:
     x = train[i].isnull().values.any()
     if x != False:
         nans_train.append(i)
+
 train = train.drop(nans_train, axis = 1) #remove columns with NaNs
 nans_test = list([])
 for i in test.columns:
     x = test[i].isnull().values.any()
     if x != False:
         nans_test.append(i)
+
 test = test.drop(nans_test, axis = 1)
 
 #Scale price_rank and star_rank as they where mistakenly not scaled
@@ -251,7 +253,7 @@ np.random.seed(10)
 
 train_srch_id = np.random.choice(a = train.srch_id.unique(), size = round(len(train.srch_id.unique())*0.80), replace = False)
 train_ = train[pd.Series(train.srch_id).isin(train_srch_id)] #Get train set
-test =  train[~pd.Series(train.srch_id).isin(train_srch_id)] #Get test set
+test_ =  train[~pd.Series(train.srch_id).isin(train_srch_id)] #Get test set
 
 # Train random forest regressor
 rf0.fit(train_[m2_rnn], train_['booking_click'])
