@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import datetime
 import math
 import datetime
+import seaborn as sns
 
 plt.rcParams['figure.figsize'] = (10.0, 8.0)
 import seaborn as sns
@@ -64,7 +65,7 @@ m1_rnn = ['hotel_quality_click_srch_length_of_staystd',
        'hotel_quality_booking_visitor_location_country_idstd','hotel_quality_click_monthstd',
        'hotel_quality_booking_monthstd']  #Diversification only on key
 
-m2_rnn= ['price_rank', 'star_rank', 'price_difference_rank',
+m2_rnn= ['price_rank', 'star_rank','price_difference_rank',
          'hotel_quality_click_monthstd',          
        'prop_location_score2_visitor_location_country_idstd',
        'price_usd_visitor_location_country_idstd',
@@ -77,14 +78,14 @@ m2_rnn= ['price_rank', 'star_rank', 'price_difference_rank',
        'price_usd_srch_destination_idstd',
        'orig_destination_distance_srch_destination_idstd',
        'price_difference_srch_destination_idstd',
-       'hotel_position_avg_srch_destination_idstd',
        'hotel_quality_click_srch_destination_idstd',
        'hotel_quality_booking_srch_destination_idstd',
        'srch_length_of_stay_srch_destination_idstd',
        'prop_location_score2_srch_length_of_staystd',
        'price_usd_srch_length_of_staystd',
        'price_difference_srch_length_of_staystd',
-       'hotel_position_avg_srch_length_of_staystd'] #Diversification only on explanatory variables
+       'dummy_top5_avg', 'dummy_top510_avg', 'dummy_top1015_avg',
+       'dummy_top1520_avg', 'dummy_top2050_avg'] #Diversification only on explanatory variables
 
 m3_rnn= ['prop_brand_bool', 'promotion_flag', 'price_rank', 'star_rank', 'price_difference_rank', 
          'prop_starrating_monotonic',  'dummy_starrating_diff_low', 
@@ -115,24 +116,24 @@ clf.fit(train[m3_rnn], np.array(train['booking_click']).T)
 output_ = clf.predict(train[m3_rnn])
 
 #Insample Fit is very bad. This imply the neural network is not an appropate model to train this time of dataset
+#Performance: 0.3 to 0.36 NDCG by optimizing parameters and incorporating variables with highest importance.
 result = train[['srch_id','booking_bool', 'click_bool']]
 result = result.assign(pred = output_)
 in_nn_ndcg = neural_network.ndcg(result)
 
 
 
-'RandomForestClassifier'
+'Random Forest Regressor'
 from sklearn.ensemble import *
 from sklearn.gaussian_process import GaussianProcess
 from sklearn.ensemble import RandomForestClassifier
 from sklearn import svm
 
 n_trees=150
-n_jobs=1
-max_depth=100
+n_jobs=-1
+#max_depth=120
 
-rf0 = RandomForestRegressor(n_estimators=n_trees, verbose=2, n_jobs=n_jobs,
-            max_depth=max_depth, random_state=1)
+rf0 = RandomForestRegressor(n_estimators=n_trees, verbose=2, n_jobs=n_jobs, random_state=1)
 
 rf0.fit(train[m3_rnn], train['booking_click'])
 
@@ -156,7 +157,8 @@ importances = pd.DataFrame({'feature':train_[m2_rnn].columns,'importance':np.rou
 importances = importances.sort_values('importance',ascending=False).set_index('feature')
 importances.plot.bar()
 
-#Good performance: 0.44 NDCG
+#Good performance: from 0.41 to 0.475 NDCG by optimizing parameters and removing variables with low importance
+#Performance as a function of n_trees: (0.40 NDCG, 5 trees), (0.475, 50 trees), (0.48, 150 trees), (0.51, 300 trees)
 output_rf_out = rf0.predict(test[m2_rnn])
 result = test[['srch_id','booking_bool', 'click_bool']]
 result = result.assign(pred = output_rf_out)

@@ -49,10 +49,31 @@ train = train.reset_index()
 
 ##HOTEL POSITION##
 #position of the hotel in the same destination in previous and next searches
-hotel_position_series = train.set_index(['date_time']).sort_index().groupby(['prop_id']).apply(lambda x: x.position.rolling(window=3, center=True).mean()).reset_index()
-train = train.sort_values(['prop_id','date_time']).reset_index(drop=True)
+hotel_position_series = pd.DataFrame(train.groupby(['prop_id']).apply(lambda x: x.position.mean()))
+hotel_position_series.columns = ['position']
+
+hotel_position_series.loc[~np.logical_and(hotel_position_series['position'] > 20, hotel_position_series['position'] <= 50), 'dummy_top2050_avg'] = 0
+hotel_position_series.loc[np.logical_and(hotel_position_series['position'] > 20, hotel_position_series['position'] <= 50), 'dummy_top2050_avg'] = 1
+hotel_position_series.loc[~np.logical_and(hotel_position_series['position'] > 15, hotel_position_series['position'] <= 20), 'dummy_top1520_avg'] = 0 
+hotel_position_series.loc[np.logical_and(hotel_position_series['position'] > 15, hotel_position_series['position'] <= 20), 'dummy_top1520_avg'] = 1 
+hotel_position_series.loc[~np.logical_and(hotel_position_series['position'] > 10, hotel_position_series['position'] <= 15), 'dummy_top1015_avg'] = 0 
+hotel_position_series.loc[np.logical_and(hotel_position_series['position'] > 10, hotel_position_series['position'] <= 15), 'dummy_top1015_avg'] = 1 
+hotel_position_series.loc[~np.logical_and(hotel_position_series['position'] <= 10, hotel_position_series['position'] > 5), 'dummy_top510_avg'] = 0 
+hotel_position_series.loc[np.logical_and(hotel_position_series['position'] <= 10, hotel_position_series['position'] > 5), 'dummy_top510_avg'] = 1 
+hotel_position_series.loc[~(hotel_position_series['position'] <= 5), 'dummy_top5_avg'] = 0  
+hotel_position_series.loc[(hotel_position_series['position'] <= 5), 'dummy_top5_avg'] = 1 
+
+train = train.set_index('prop_id')
+train['dummy_top5_avg'] = hotel_position_series.dummy_top5_avg
+train['dummy_top510_avg'] = hotel_position_series.dummy_top510_avg
+train['dummy_top1015_avg'] = hotel_position_series.dummy_top1015_avg
+train['dummy_top1520_avg'] = hotel_position_series.dummy_top1520_avg
+train['dummy_top2050_avg'] = hotel_position_series.dummy_top2050_avg
+train = train.reset_index()
+
+#train = train.sort_values(['prop_id','date_time']).reset_index(drop=True)
 train['hotel_position_avg'] = hotel_position_series.position
-train['hotel_position_avg'] = train['hotel_position_avg'].fillna(-1)
+#train['hotel_position_avg'] = train['hotel_position_avg'].fillna(-1)
 
 ##PRICE RANK##
 #order of the price within srch_id
