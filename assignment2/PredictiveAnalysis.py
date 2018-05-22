@@ -269,6 +269,19 @@ result = test[['prop_id', 'srch_id','booking_bool', 'click_bool']]
 result = result.assign(pred = output_rf_out)
 ndcg_test = ndcg(result)
 
+# Combined model
+w = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
+combination_df = pd.DataFrame(columns=w)
+for i in w:
+    combination_df[i] = out_rf1_out*i + out_rf2_out*(1-i)
+
+for i in w:
+    result = result.assign(pred = combination_df[i])
+    ndcg_test = ndcg(result)
+    print('For booking percent {}, NDCG is:'.format(i))
+    print(ndcg_test)
+    result = result.drop('pred', axis=1)
+
 
 
 'Logistic Regression'
