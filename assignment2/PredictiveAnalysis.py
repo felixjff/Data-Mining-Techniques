@@ -163,6 +163,18 @@ output_rf_out = rf0.predict(test[m2_rnn])
 result = test[['srch_id','booking_bool', 'click_bool']]
 result = result.assign(pred = output_rf_out)
 
+#Alternative to using booking_click. One can train two models, using click and booking as dependent variables respectivley.
+rf1 = RandomForestRegressor(n_estimators=n_trees, verbose=2, n_jobs=n_jobs, random_state=1)
+rf1.fit(train_[m2_rnn], train_['booking_bool'])
+rf2 = RandomForestRegressor(n_estimators=n_trees, verbose=2, n_jobs=n_jobs, random_state=1)
+rf2.fit(train_[m2_rnn], train_['click_bool'])
+#The predictions can be linearly combined to generate our prediction out-of-sample
+out_rf1_out =  rf1.predict(test[m2_rnn])
+out_rf2_out =  rf1.predict(test[m2_rnn])
+for w in range(0,1, 0.1):
+    result[output_rf_out + w] = out_rf1_out*w + out_rf2_out*(1-w)
+#We can determine the NCDG for each linear combination and select the optimal w to generate the forecast for the test submission file.
+    
 
 
 'Logistic Regression'
