@@ -60,24 +60,78 @@ def prediction_to_output_file(dataframe, outfile_name):
 #Open training set
 with open('data/standardise/training_set_VU_DM_2014.csv', 'r') as csvfile:
     train = pd.read_csv(csvfile)
+#Open test set
+with open('data/standardise/test_set_VU_DM_2014.csv', 'r') as csvfile:
+    test = pd.read_csv(csvfile)
 
 #Determine if a column has missing values (mistakes in previous analysis)
-nans = list([])
+nans_train = list([])
 for i in train.columns:
     x = train[i].isnull().values.any()
     if x != False:
-        nans.append(i)
-
-train = train.drop(nans, axis = 1) #remove columns with NaNs
+        nans_train.append(i)
+train = train.drop(nans_train, axis = 1) #remove columns with NaNs
+nans_test = list([])
+for i in test.columns:
+    x = test[i].isnull().values.any()
+    if x != False:
+        nans_test.append(i)
+test = test.drop(nans_test, axis = 1)
 
 #Scale price_rank and star_rank as they where mistakenly not scaled
 train['price_rank'] = scale(train['price_rank'])
 train['star_rank'] = scale(train['star_rank'])
-# test['prince_rank'] = scale(test['price_rank'])
-# test['star_rank'] = scale(test['star_rank'])
+test['price_rank'] = scale(test['price_rank'])
+test['star_rank'] = scale(test['star_rank'])
 
-#Define all variables that are not used for training each model
+#Add some new features to do with position based on train data to test data
+prop_id_position_mean = train.groupby(['prop_id']).apply(lambda x: np.mean(x.position))
+prop_id_position_q1 = train.groupby(['prop_id']).apply(lambda x: np.percentile(x.position, 25) )
+prop_id_position_q3 = train.groupby(['prop_id']).apply(lambda x: np.percentile(x.position, 75) )
+#change the index so that new series values can be appended correctly
+train = train.set_index('prop_id')
+train['prop_id_position_mean'] = prop_id_position_mean
+train['prop_id_position_q1'] = prop_id_position_q1
+train['prop_id_position_q3'] = prop_id_position_q3
+train['prop_id_position_mean_std'] = scale(train['prop_id_position_mean'])
+train['prop_id_position_q1_std'] = scale(train['prop_id_position_q1'])
+train['prop_id_position_q3_std'] = scale(train['prop_id_position_q3'])
 
+# srch_id_prop_id_position_mean_std = train.groupby(['srch_id']).apply(lambda x: scale(x.prop_id_position_mean))
+# srch_id_prop_id_position_q1_std = train.groupby(['srch_id']).apply(lambda x: scale(x.prop_id_position_q1))
+# srch_id_prop_id_position_q3_std = train.groupby(['srch_id']).apply(lambda x: scale(x.prop_id_position_q3))
+# train = train.set_index('srch_id')
+# train['srch_id_prop_id_position_mean_std'] = srch_id_prop_id_position_mean_std
+# train['srch_id_prop_id_position_q1_std'] = srch_id_prop_id_position_q1_std
+# train['srch_id_prop_id_position_q3_std'] = srch_id_prop_id_position_q3_std
+
+#there are more prop_ids in test than in train, set those equal to 0
+test = test.set_index('prop_id')
+index_diff = test.index.difference(train.index)
+test['prop_id_position_mean'] = 1
+test['prop_id_position_q1'] = 1
+test['prop_id_position_q3'] = 1
+test['prop_id_position_mean'] = prop_id_position_mean
+test['prop_id_position_q1'] = prop_id_position_q1
+test['prop_id_position_q3'] = prop_id_position_q3
+test.prop_id_position_mean = test.prop_id_position_mean.fillna(0)
+test.prop_id_position_q1 = test.prop_id_position_q1.fillna(0)
+test.prop_id_position_q3 = test.prop_id_position_q3.fillna(0)
+test['prop_id_position_mean_std'] = scale(test['prop_id_position_mean'])
+test['prop_id_position_q1_std'] = scale(test['prop_id_position_q1'])
+test['prop_id_position_q3_std'] = scale(test['prop_id_position_q3'])
+
+
+#reset index, drop rows which are not standardised
+train = train.reset_index()
+test = test.reset_index()
+train = train.drop(['prop_id_position_mean', 'prop_id_position_q1', 'prop_id_position_q3'], axis=1)
+test = test.drop(['prop_id_position_mean', 'prop_id_position_q1', 'prop_id_position_q3'], axis=1)
+
+
+#########################################################
+#RUN AGAIN ON THE TRUE TEST SET (I.E. NOT VALIDATION SET)
+#########################################################
 
 'Recurrent Neural Network'
 
@@ -86,7 +140,6 @@ from MachineLearning import NeuronLayer
 from sklearn.neural_network import MLPClassifier
 
 #Different variable selections
-
 train['booking_click'] = train.booking_bool #Define a variable that is one if click or booked
 train.loc[train['booking_click'] == 0, 'booking_click'] = train.loc[train['booking_click'] == 0, 'click_bool']
 
@@ -209,7 +262,7 @@ importances = importances.sort_values('importance',ascending=False).set_index('f
 importances.plot.bar()
 
 # Good performance: 0.44 NDCG
-output_rf_out = rf0.predict(test[m2_rnn])
+output_rf_out = rf0.predict(test[m2_rnn_test])
 result = test[['prop_id', 'srch_id','booking_bool', 'click_bool']]
 result = result.assign(pred = output_rf_out)
 ndcg_test = ndcg(result)
