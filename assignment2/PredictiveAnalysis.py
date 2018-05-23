@@ -177,14 +177,48 @@ test = test.reset_index()
 #HOTEL QUALITY VARIABLES TO ADD TO TEST SET
 #########################################################
 # may be able to test hashed ones with other vars
-hotel_quality_add = ['hotel_quality_booking', \
-'hotel_quality_booking_visitor_location_country_idstd', \
-'hotel_quality_click_srch_length_of_staystd', \
-'hotel_quality_booking_srch_destination_idstd', \
-'hotel_quality_click', \
-'hotel_quality_click_visitor_location_country_idstd', \
-'hotel_quality_booking_srch_length_of_staystd', \
-'hotel_quality_click_srch_destination_idstd']
+# hotel_quality_add = ['hotel_quality_booking', \
+# 'hotel_quality_booking_visitor_location_country_idstd', \
+# 'hotel_quality_click_srch_length_of_staystd', \
+# 'hotel_quality_booking_srch_destination_idstd', \
+# 'hotel_quality_click', \
+# 'hotel_quality_click_visitor_location_country_idstd', \
+# 'hotel_quality_booking_srch_length_of_staystd', \
+# 'hotel_quality_click_srch_destination_idstd']
+
+hotel_quality_booking = train.groupby(['prop_id'])['hotel_quality_booking'].apply(lambda x: x.iloc[0])
+hotel_quality_click = train.groupby(['prop_id'])['hotel_quality_click'].apply(lambda x: x.iloc[0])
+hotel_quality_click_srch_length_of_staystd = train.groupby(['prop_id'])['hotel_quality_click_srch_length_of_staystd'].apply(lambda x: x.iloc[0])
+hotel_quality_booking_srch_destination_idstd = train.groupby(['prop_id'])['hotel_quality_booking_srch_destination_idstd'].apply(lambda x: x.iloc[0])
+hotel_quality_booking_srch_length_of_staystd = train.groupby(['prop_id'])['hotel_quality_booking_srch_length_of_staystd'].apply(lambda x: x.iloc[0])
+hotel_quality_click_srch_destination_idstd = train.groupby(['prop_id'])['hotel_quality_click_srch_destination_idstd'].apply(lambda x: x.iloc[0])
+hotel_position_avg_per_prop_id = train.groupby(['prop_id']).apply(lambda x: np.mean(x.hotel_position_avg))
+test = test.set_index('prop_id')
+train = train.set_index('prop_id')
+# the first min assignments here are to take care of the prop_ids which are in test and not train
+test['hotel_quality_booking'] = min(train.hotel_quality_booking)
+test['hotel_quality_booking'] = hotel_quality_booking
+test['hotel_quality_click'] = min(train.hotel_quality_click)
+test['hotel_quality_click'] = hotel_quality_click
+test['hotel_quality_click_srch_length_of_staystd'] = min(train.hotel_quality_click_srch_length_of_staystd)
+test['hotel_quality_click_srch_length_of_staystd'] = hotel_quality_click_srch_length_of_staystd
+test['hotel_quality_booking_srch_destination_idstd'] = min(train.hotel_quality_booking_srch_destination_idstd)
+test['hotel_quality_booking_srch_destination_idstd'] = hotel_quality_booking_srch_destination_idstd
+test['hotel_quality_booking_srch_length_of_staystd'] = min(train.hotel_quality_booking_srch_length_of_staystd)
+test['hotel_quality_booking_srch_length_of_staystd'] = hotel_quality_booking_srch_length_of_staystd
+test['hotel_quality_click_srch_destination_idstd'] = min(train.hotel_quality_click_srch_destination_idstd)
+test['hotel_quality_click_srch_destination_idstd'] = hotel_quality_click_srch_destination_idstd
+train['hotel_position_avg_per_prop_id'] = min(hotel_position_avg_per_prop_id)
+train['hotel_position_avg_per_prop_id'] = hotel_position_avg_per_prop_id
+test['hotel_position_avg_per_prop_id'] = min(hotel_position_avg_per_prop_id)
+test['hotel_position_avg_per_prop_id'] = hotel_position_avg_per_prop_id
+train['hotel_position_avg_per_prop_id'] = scale(train['hotel_position_avg_per_prop_id'])
+test['hotel_position_avg_per_prop_id'] = test['hotel_position_avg_per_prop_id'].fillna(min(test['hotel_position_avg_per_prop_id']))
+test['hotel_position_avg_per_prop_id'] = scale(test['hotel_position_avg_per_prop_id'])
+train = train.reset_index()
+test = test.reset_index()
+
+
 
 
 #########################################################
@@ -192,13 +226,6 @@ hotel_quality_add = ['hotel_quality_booking', \
 #Different variable selections
 train['booking_click'] = train.booking_bool #Define a variable that is one if click or booked
 train.loc[train['booking_click'] == 0, 'booking_click'] = train.loc[train['booking_click'] == 0, 'click_bool']
-
-
-'Recurrent Neural Network'
-
-from MachineLearning import NeuralNetwork
-from MachineLearning import NeuronLayer
-from sklearn.neural_network import MLPClassifier
 
 m1_rnn = ['hotel_quality_click_srch_length_of_staystd',
        'hotel_quality_booking_srch_length_of_staystd', 'hotel_quality_click_prop_country_idstd',
@@ -228,7 +255,14 @@ m2_rnn= ['price_rank', 'star_rank','price_difference_rank',
        'price_usd_srch_length_of_staystd',
        'price_difference_srch_length_of_staystd',
        'dummy_top5_avg', 'dummy_top510_avg', 'dummy_top1015_avg',
-       'dummy_top1520_avg', 'dummy_top2050_avg'] #Diversification only on explanatory variables
+       'dummy_top1520_avg', 'dummy_top2050_avg',
+       'hotel_quality_booking',
+       'hotel_quality_click_srch_length_of_staystd',
+       'hotel_quality_booking_srch_destination_idstd',
+       'hotel_quality_click',
+       'hotel_quality_booking_srch_length_of_staystd',
+       'hotel_quality_click_srch_destination_idstd',
+       'hotel_position_avg_per_prop_id'] #Diversification only on explanatory variables
 
 m2_rnn_test = ['price_rank', 'star_rank', 'price_difference_rank',
        'prop_location_score2_visitor_location_country_idstd',
@@ -255,6 +289,12 @@ m3_rnn= ['prop_brand_bool', 'promotion_flag', 'price_rank', 'star_rank', 'price_
          'prop_location_score1_monthstd', 'price_difference_prop_country_idstd',
          'prop_location_score2_monthstd', 'price_usd_srch_destination_idstd',
          'hotel_position_avg_monthstd','price_usd_srch_destination_idstd'] #Diversification only on explanatory variables
+
+'Recurrent Neural Network'
+
+from MachineLearning import NeuralNetwork
+from MachineLearning import NeuronLayer
+from sklearn.neural_network import MLPClassifier
 
 np.random.seed(10)
 
@@ -328,7 +368,7 @@ train_ = train[pd.Series(train.srch_id).isin(train_srch_id)] #Get train set
 test_ =  train[~pd.Series(train.srch_id).isin(train_srch_id)] #Get test set
 
 # Train random forest regressor
-rf0.fit(train_[train_cols], train_['booking_click'])
+rf0.fit(train_[m2_rnn], train_['booking_click'])
 
 # Use properties of random forests to determine feature importance
 importances = pd.DataFrame({'feature':train_[m2_rnn].columns,'importance':np.round(rf0.feature_importances_,3)})
@@ -351,7 +391,7 @@ rf2 = RandomForestRegressor(n_estimators=n_trees, verbose=2, n_jobs=n_jobs, rand
 rf1.fit(train_[m2_rnn], train_['booking_bool'])
 rf2.fit(train_[m2_rnn], train_['click_bool'])
 
-#Generate predictions with each model 
+#Generate predictions with each model
 output_rf1_out = rf1.predict(test_[m2_rnn])
 output_rf2_out = rf2.predict(test_[m2_rnn])
 
@@ -361,12 +401,13 @@ for i in w:
     combination_df[i] = output_rf1_out*i + output_rf2_out*(1-i)
 
 ndcg_test_ = np.zeros(len(w))*math.nan
+result = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
 it = 0
 for i in w:
     result = result.assign(pred = combination_df[i])
-    ndcg_test_[it] = ndcg(result)
+    ndcg_test = {'{}'.format(it): ndcg(result)}
     print('For booking percent {}, NDCG is:'.format(i))
-    print(ndcg_test_[it])
+    print(ndcg_test['{}'.format(it)])
     result = result.drop('pred', axis=1)
     it = it + 1
 
@@ -418,8 +459,8 @@ model = LambdaMART(metric=metric, max_depth = 6, n_estimators=100, learning_rate
 model.fit(train_[m2_rnn], train_['rel'], qids_val, monitor=monitor)
 
 #creating the data to test the models with
-LambdaMART_testX = test[m2_rnn].set_index('srch_id').sort_index()
-LambdaMART_testY = test[['srch_id','booking_bool', 'click_bool']]
+LambdaMART_testX = test_[m2_rnn].set_index('srch_id').sort_index()
+LambdaMART_testY = test_[['srch_id','booking_bool', 'click_bool']]
 LambdaMART_test_qids = LambdaMART_testX.index
 
 #LambdaMART predictions
