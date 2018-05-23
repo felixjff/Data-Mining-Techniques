@@ -160,6 +160,33 @@ train = train.reset_index()
 train['hotel_position_avg'] = hotel_position_series.position
 train['hotel_position_avg'] = train['hotel_position_avg'].fillna(-1)
 
+test = test.set_index('prop_id')
+test['dummy_top5_avg'] = 0
+test['dummy_top510_avg'] = 0
+test['dummy_top1015_avg'] = 0
+test['dummy_top1520_avg'] = 0
+test['dummy_top2050_avg'] = 0
+test['dummy_top5_avg'] = hotel_position_series.dummy_top5_avg
+test['dummy_top510_avg'] = hotel_position_series.dummy_top510_avg
+test['dummy_top1015_avg'] = hotel_position_series.dummy_top1015_avg
+test['dummy_top1520_avg'] = hotel_position_series.dummy_top1520_avg
+test['dummy_top2050_avg'] = hotel_position_series.dummy_top2050_avg
+test = test.reset_index()
+
+#########################################################
+#HOTEL QUALITY VARIABLES TO ADD TO TEST SET
+#########################################################
+# may be able to test hashed ones with other vars
+hotel_quality_add = ['hotel_quality_booking', \
+'hotel_quality_booking_visitor_location_country_idstd', \
+'hotel_quality_click_srch_length_of_staystd', \
+'hotel_quality_booking_srch_destination_idstd', \
+'hotel_quality_click', \
+'hotel_quality_click_visitor_location_country_idstd', \
+'hotel_quality_booking_srch_length_of_staystd', \
+'hotel_quality_click_srch_destination_idstd']
+
+
 #########################################################
 
 #Different variable selections
@@ -181,7 +208,8 @@ m1_rnn = ['hotel_quality_click_srch_length_of_staystd',
        'hotel_quality_booking_visitor_location_country_idstd','hotel_quality_click_monthstd',
        'hotel_quality_booking_monthstd']  #Diversification only on key
 
-m2_rnn= ['price_rank', 'star_rank', 'price_difference_rank',
+m2_rnn= ['price_rank', 'star_rank','price_difference_rank',
+        # 'hotel_quality_click_monthstd',
        'prop_location_score2_visitor_location_country_idstd',
        'price_usd_visitor_location_country_idstd',
        'orig_destination_distance_visitor_location_country_idstd',
@@ -193,14 +221,14 @@ m2_rnn= ['price_rank', 'star_rank', 'price_difference_rank',
        'price_usd_srch_destination_idstd',
        'orig_destination_distance_srch_destination_idstd',
        'price_difference_srch_destination_idstd',
-       'hotel_position_avg_srch_destination_idstd',
        'hotel_quality_click_srch_destination_idstd',
        'hotel_quality_booking_srch_destination_idstd',
        'srch_length_of_stay_srch_destination_idstd',
        'prop_location_score2_srch_length_of_staystd',
        'price_usd_srch_length_of_staystd',
        'price_difference_srch_length_of_staystd',
-       'hotel_position_avg_srch_length_of_staystd'] #Diversification only on explanatory variables
+       'dummy_top5_avg', 'dummy_top510_avg', 'dummy_top1015_avg',
+       'dummy_top1520_avg', 'dummy_top2050_avg'] #Diversification only on explanatory variables
 
 m2_rnn_test = ['price_rank', 'star_rank', 'price_difference_rank',
        'prop_location_score2_visitor_location_country_idstd',
@@ -308,7 +336,7 @@ importances = importances.sort_values('importance',ascending=False).set_index('f
 importances.plot.bar()
 
 # Good performance: 0.44 NDCG
-output_rf_out = rf0.predict(test_[train_cols])
+output_rf_out = rf0.predict(test_[m2_rnn])
 result = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
 result = result.assign(pred = output_rf_out)
 ndcg_test = ndcg(result)
