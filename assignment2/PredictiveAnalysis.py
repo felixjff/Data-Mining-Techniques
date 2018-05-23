@@ -288,7 +288,7 @@ from sklearn.gaussian_process import GaussianProcess
 from sklearn.ensemble import RandomForestClassifier
 from sklearn import svm
 
-n_trees=300
+n_trees=350
 n_jobs=50
 # max_depth=100
 
@@ -342,17 +342,33 @@ result = result.assign(pred = output_rf_out)
 ndcg_test = ndcg(result)
 
 # Combined model
+
+# Define random forest regressor models for booking_bool and click_bool
+rf1 = RandomForestRegressor(n_estimators=n_trees, verbose=2, n_jobs=n_jobs, random_state=1)
+rf2 = RandomForestRegressor(n_estimators=n_trees, verbose=2, n_jobs=n_jobs, random_state=1)
+
+#Train random forests for booking_bool and click_bool
+rf1.fit(train_[m2_rnn], train_['booking_bool'])
+rf2.fit(train_[m2_rnn], train_['click_bool'])
+
+#Generate predictions with each model 
+output_rf1_out = rf1.predict(test_[m2_rnn])
+output_rf2_out = rf2.predict(test_[m2_rnn])
+
 w = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
 combination_df = pd.DataFrame(columns=w)
 for i in w:
-    combination_df[i] = out_rf1_out*i + out_rf2_out*(1-i)
+    combination_df[i] = output_rf1_out*i + output_rf2_out*(1-i)
 
+ndcg_test_ = np.zeros(len(w))*math.nan
+it = 0
 for i in w:
     result = result.assign(pred = combination_df[i])
-    ndcg_test = ndcg(result)
+    ndcg_test_[it] = ndcg(result)
     print('For booking percent {}, NDCG is:'.format(i))
-    print(ndcg_test)
+    print(ndcg_test_[it])
     result = result.drop('pred', axis=1)
+    it = it + 1
 
 
 
