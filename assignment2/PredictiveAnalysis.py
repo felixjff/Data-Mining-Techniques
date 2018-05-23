@@ -57,10 +57,9 @@ def prediction_to_output_file(dataframe, outfile_name):
 
 ''' MODEL CALIBRATION '''
 
-#Open training set
 with open('data/standardise/training_set_VU_DM_2014.csv', 'r') as csvfile:
     train = pd.read_csv(csvfile)
-#Open test set
+
 with open('data/standardise/test_set_VU_DM_2014.csv', 'r') as csvfile:
     test = pd.read_csv(csvfile)
 
@@ -129,22 +128,50 @@ train = train.reset_index()
 test = test.reset_index()
 train = train.drop(['prop_id_position_mean', 'prop_id_position_q1', 'prop_id_position_q3'], axis=1)
 test = test.drop(['prop_id_position_mean', 'prop_id_position_q1', 'prop_id_position_q3'], axis=1)
-
-
 #########################################################
 #RUN AGAIN ON THE TRUE TEST SET (I.E. NOT VALIDATION SET)
 #########################################################
+
+#########################################################
+#INTRODUCING HOTEL POSITION DUMMIES
+#########################################################
+
+hotel_position_series = pd.DataFrame(train.groupby(['prop_id']).apply(lambda x: x.position.mean()))
+hotel_position_series.columns = ['position']
+
+hotel_position_series.loc[~np.logical_and(hotel_position_series['position'] > 20, hotel_position_series['position'] <= 50), 'dummy_top2050_avg'] = 0
+hotel_position_series.loc[np.logical_and(hotel_position_series['position'] > 20, hotel_position_series['position'] <= 50), 'dummy_top2050_avg'] = 1
+hotel_position_series.loc[~np.logical_and(hotel_position_series['position'] > 15, hotel_position_series['position'] <= 20), 'dummy_top1520_avg'] = 0
+hotel_position_series.loc[np.logical_and(hotel_position_series['position'] > 15, hotel_position_series['position'] <= 20), 'dummy_top1520_avg'] = 1
+hotel_position_series.loc[~np.logical_and(hotel_position_series['position'] > 10, hotel_position_series['position'] <= 15), 'dummy_top1015_avg'] = 0
+hotel_position_series.loc[np.logical_and(hotel_position_series['position'] > 10, hotel_position_series['position'] <= 15), 'dummy_top1015_avg'] = 1
+hotel_position_series.loc[~np.logical_and(hotel_position_series['position'] <= 10, hotel_position_series['position'] > 5), 'dummy_top510_avg'] = 0
+hotel_position_series.loc[np.logical_and(hotel_position_series['position'] <= 10, hotel_position_series['position'] > 5), 'dummy_top510_avg'] = 1
+hotel_position_series.loc[~(hotel_position_series['position'] <= 5), 'dummy_top5_avg'] = 0
+hotel_position_series.loc[(hotel_position_series['position'] <= 5), 'dummy_top5_avg'] = 1
+
+train = train.set_index('prop_id')
+train['dummy_top5_avg'] = hotel_position_series.dummy_top5_avg
+train['dummy_top510_avg'] = hotel_position_series.dummy_top510_avg
+train['dummy_top1015_avg'] = hotel_position_series.dummy_top1015_avg
+train['dummy_top1520_avg'] = hotel_position_series.dummy_top1520_avg
+train['dummy_top2050_avg'] = hotel_position_series.dummy_top2050_avg
+train = train.reset_index()
+train['hotel_position_avg'] = hotel_position_series.position
+train['hotel_position_avg'] = train['hotel_position_avg'].fillna(-1)
+
+#########################################################
+
+#Different variable selections
+train['booking_click'] = train.booking_bool #Define a variable that is one if click or booked
+train.loc[train['booking_click'] == 0, 'booking_click'] = train.loc[train['booking_click'] == 0, 'click_bool']
+
 
 'Recurrent Neural Network'
 
 from MachineLearning import NeuralNetwork
 from MachineLearning import NeuronLayer
 from sklearn.neural_network import MLPClassifier
-
-#Different variable selections
-train['booking_click'] = train.booking_bool #Define a variable that is one if click or booked
-train.loc[train['booking_click'] == 0, 'booking_click'] = train.loc[train['booking_click'] == 0, 'click_bool']
-
 
 m1_rnn = ['hotel_quality_click_srch_length_of_staystd',
        'hotel_quality_booking_srch_length_of_staystd', 'hotel_quality_click_prop_country_idstd',
@@ -235,9 +262,9 @@ from sklearn import svm
 
 n_trees=300
 n_jobs=50
-max_depth=100
+# max_depth=100
 
-rf0 = RandomForestRegressor(n_estimators=n_trees, verbose=2, n_jobs=n_jobs, max_depth=max_depth, random_state=1)
+rf0 = RandomForestRegressor(n_estimators=n_trees, verbose=2, n_jobs=n_jobs, random_state=1)
 
 
 #INSAMPLE Fit is almost perfect. Hence, will analyze performance out-of-sample.
@@ -251,12 +278,29 @@ in_nn_ndcg = neural_network.ndcg(result)
 # Out-of-Sample performance
 np.random.seed(10)
 
+train = train.drop(['date_time', 'Unnamed: 0', 'Unnamed: 0.1', 'Unnamed: 0.1.1'], axis=1)
+not_in_test_cols = ['booking_click', 'booking_bool', 'click_bool', 'position', \
+'prop_id', \
+'srch_id', \
+'gross_bookings_usd', \
+'hotel_position_avg', \
+'hotel_position_avg_visitor_location_country_idstd',\
+'hotel_position_avg_srch_length_of_staystd',\
+'hotel_position_avg_srch_destination_idstd', \
+'hotel_quality_booking_srch_destination_idstd',\
+'hotel_quality_booking_srch_length_of_staystd', \
+'hotel_quality_booking_visitor_location_country_idstd', \
+'hotel_quality_click_srch_destination_idstd', \
+'hotel_quality_click_srch_length_of_staystd', \
+'hotel_quality_click_visitor_location_country_idstd']
+train_cols = train.loc[:, train.columns.difference(not_in_test_cols)].columns.values
+
 train_srch_id = np.random.choice(a = train.srch_id.unique(), size = round(len(train.srch_id.unique())*0.80), replace = False)
 train_ = train[pd.Series(train.srch_id).isin(train_srch_id)] #Get train set
 test_ =  train[~pd.Series(train.srch_id).isin(train_srch_id)] #Get test set
 
 # Train random forest regressor
-rf0.fit(train_[m2_rnn], train_['booking_click'])
+rf0.fit(train_[train_cols], train_['booking_click'])
 
 # Use properties of random forests to determine feature importance
 importances = pd.DataFrame({'feature':train_[m2_rnn].columns,'importance':np.round(rf0.feature_importances_,3)})
@@ -264,8 +308,8 @@ importances = importances.sort_values('importance',ascending=False).set_index('f
 importances.plot.bar()
 
 # Good performance: 0.44 NDCG
-output_rf_out = rf0.predict(test[m2_rnn_test])
-result = test[['prop_id', 'srch_id','booking_bool', 'click_bool']]
+output_rf_out = rf0.predict(test_[train_cols])
+result = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
 result = result.assign(pred = output_rf_out)
 ndcg_test = ndcg(result)
 
