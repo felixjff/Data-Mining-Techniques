@@ -13,6 +13,7 @@ import datetime
 import math
 import datetime
 import sys
+import pickle
 
 plt.rcParams['figure.figsize'] = (10.0, 8.0)
 import seaborn as sns
@@ -171,6 +172,11 @@ test['dummy_top510_avg'] = hotel_position_series.dummy_top510_avg
 test['dummy_top1015_avg'] = hotel_position_series.dummy_top1015_avg
 test['dummy_top1520_avg'] = hotel_position_series.dummy_top1520_avg
 test['dummy_top2050_avg'] = hotel_position_series.dummy_top2050_avg
+test['dummy_top5_avg'] = test['dummy_top5_avg'].fillna(0)
+test['dummy_top510_avg'] = test['dummy_top510_avg'].fillna(0)
+test['dummy_top1015_avg'] = test['dummy_top1015_avg'].fillna(0)
+test['dummy_top1520_avg'] = test['dummy_top1520_avg'].fillna(0)
+test['dummy_top2050_avg'] = test['dummy_top2050_avg'].fillna(0)
 test = test.reset_index()
 
 #########################################################
@@ -198,16 +204,29 @@ train = train.set_index('prop_id')
 # the first min assignments here are to take care of the prop_ids which are in test and not train
 test['hotel_quality_booking'] = min(train.hotel_quality_booking)
 test['hotel_quality_booking'] = hotel_quality_booking
+test['hotel_quality_booking'] = test['hotel_quality_booking'].fillna(min(test['hotel_quality_booking']))
+
 test['hotel_quality_click'] = min(train.hotel_quality_click)
 test['hotel_quality_click'] = hotel_quality_click
+test['hotel_quality_click'] = test['hotel_quality_click'].fillna(min(test['hotel_quality_click']))
+
 test['hotel_quality_click_srch_length_of_staystd'] = min(train.hotel_quality_click_srch_length_of_staystd)
 test['hotel_quality_click_srch_length_of_staystd'] = hotel_quality_click_srch_length_of_staystd
+test['hotel_quality_click_srch_length_of_staystd'] = test['hotel_quality_click_srch_length_of_staystd'].fillna(min(test['hotel_quality_click_srch_length_of_staystd']))
+
 test['hotel_quality_booking_srch_destination_idstd'] = min(train.hotel_quality_booking_srch_destination_idstd)
 test['hotel_quality_booking_srch_destination_idstd'] = hotel_quality_booking_srch_destination_idstd
+test['hotel_quality_booking_srch_destination_idstd'] = test['hotel_quality_booking_srch_destination_idstd'].fillna(min(test['hotel_quality_booking_srch_destination_idstd']))
+
 test['hotel_quality_booking_srch_length_of_staystd'] = min(train.hotel_quality_booking_srch_length_of_staystd)
 test['hotel_quality_booking_srch_length_of_staystd'] = hotel_quality_booking_srch_length_of_staystd
+test['hotel_quality_booking_srch_length_of_staystd'] = test['hotel_quality_booking_srch_length_of_staystd'].fillna(min(test['hotel_quality_booking_srch_length_of_staystd']))
+
+
 test['hotel_quality_click_srch_destination_idstd'] = min(train.hotel_quality_click_srch_destination_idstd)
 test['hotel_quality_click_srch_destination_idstd'] = hotel_quality_click_srch_destination_idstd
+test['hotel_quality_click_srch_destination_idstd'] = test['hotel_quality_click_srch_destination_idstd'].fillna(min(test['hotel_quality_click_srch_destination_idstd']))
+
 train['hotel_position_avg_per_prop_id'] = min(hotel_position_avg_per_prop_id)
 train['hotel_position_avg_per_prop_id'] = hotel_position_avg_per_prop_id
 test['hotel_position_avg_per_prop_id'] = min(hotel_position_avg_per_prop_id)
@@ -325,14 +344,24 @@ in_nn_ndcg = neural_network.ndcg(result)
 'RandomForestClassifier'
 from sklearn.ensemble import *
 from sklearn.gaussian_process import GaussianProcess
-from sklearn.ensemble import RandomForestClassifier
 from sklearn import svm
 
 n_trees=350
 n_jobs=50
 # max_depth=100
 
-rf0 = RandomForestRegressor(n_estimators=n_trees, verbose=2, n_jobs=n_jobs, random_state=1)
+rf0 = RandomForestRegressor(n_estimators=n_trees,
+                            oob_score=True,
+                            verbose=2,
+                            n_jobs=n_jobs,
+                            random_state=1)
+
+# rf0 = ExtraTreesRegressor(n_estimators=n_trees,
+#                           bootstrap=True,
+#                           oob_score=True,
+#                           verbose=2,
+#                           n_jobs=n_jobs,
+#                           random_state=1)
 
 
 #INSAMPLE Fit is almost perfect. Hence, will analyze performance out-of-sample.
@@ -388,8 +417,8 @@ rf1 = RandomForestRegressor(n_estimators=n_trees, verbose=2, n_jobs=n_jobs, rand
 rf2 = RandomForestRegressor(n_estimators=n_trees, verbose=2, n_jobs=n_jobs, random_state=1)
 
 #Train random forests for booking_bool and click_bool
-rf1.fit(train_[m2_rnn], train_['booking_bool'])
-rf2.fit(train_[m2_rnn], train_['click_bool'])
+rf1.fit(train_[m2_rnn], train_['booking_click'])
+rf2.fit(train_[m2_rnn], train_['booking_bool'])
 
 #Generate predictions with each model
 output_rf1_out = rf1.predict(test_[m2_rnn])
@@ -411,6 +440,42 @@ for i in w:
     result = result.drop('pred', axis=1)
     it = it + 1
 
+# ENSEMBLE METHODS
+from sklearn.ensemble import *
+from sklearn.gaussian_process import GaussianProcess
+from sklearn import svm
+
+n_jobs=50
+
+rf0 = ExtraTreesRegressor(n_estimators=100,
+                            bootstrap=True,
+                            oob_score=True,
+                            verbose=2,
+                            n_jobs=n_jobs,
+                            random_state=1)
+
+train_srch_id = np.random.choice(a = train.srch_id.unique(), size = round(len(train.srch_id.unique())*0.80), replace = False)
+train_ = train[pd.Series(train.srch_id).isin(train_srch_id)]
+test_ =  train[~pd.Series(train.srch_id).isin(train_srch_id)]
+
+rf0.fit(train_[m2_rnn], train_['booking_click'])
+#re-fit again with more trees
+_ = rf0.set_params(n_estimators=200, warm_start=True)
+_ = rf0.fit(train_[m2_rnn], train_['booking_click'])
+#and again...
+_ = rf0.set_params(n_estimators=300, warm_start=True)
+_ = rf0.fit(train_[m2_rnn], train_['booking_click'])
+#and again...
+_ = rf0.set_params(n_estimators=400, warm_start=True)
+_ = rf0.fit(train_[m2_rnn], train_['booking_click'])
+
+output_rf_out = rf0.predict(test_[m2_rnn])
+result = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
+result = result.assign(pred = output_rf_out)
+ndcg_test = ndcg(result)
+
+with open('results/ndcg_test_first_ensemble.pkl', 'wb') as handle:
+    pickle.dump(ndcg_test, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 'Logistic Regression'
@@ -453,9 +518,19 @@ m2_rnn.append('srch_id')
 LambdaMART_train = train_[m2_rnn].set_index('srch_id').sort_index()
 qids_val = LambdaMART_train.index
 
-metric = NDCG(k=40)
-monitor = ValidationMonitor(LambdaMART_train, train_['rel'], qids_val.values, metric=metric, stop_after=50)
-model = LambdaMART(metric=metric, max_depth = 6, n_estimators=100, learning_rate=.1, verbose=1)
+metric = NDCG(k=100)
+monitor = ValidationMonitor(LambdaMART_train, train_['rel'], qids_val.values, metric=metric)
+model = LambdaMART(
+        metric=metric,
+        max_depth = 10,
+        n_estimators=1000,
+        learning_rate=.1,
+        verbose=1,
+        max_features=0.5,
+        query_subsample=0.5,
+        max_leaf_nodes=10,
+        min_samples_leaf=64
+        )
 model.fit(train_[m2_rnn], train_['rel'], qids_val, monitor=monitor)
 
 #creating the data to test the models with
