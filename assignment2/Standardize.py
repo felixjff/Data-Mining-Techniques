@@ -20,7 +20,7 @@ from scipy import stats
 from scipy.stats import norm
 
 #loading data
-testing = 0
+testing = 1
 if testing == 0:
     train = pd.read_csv('data/missing_value_analysis/training_set_VU_DM_2014.csv')
 else:
@@ -73,8 +73,8 @@ for k in keys:
         else:
             continue
 
-if testing == 1:
-    train = train.drop(drop_vars, axis = 1)
+# if testing == 1:
+#     train = train.drop(drop_vars, axis = 1)
 
 std_vars2 = ['price_rank', 'star_rank', 'prop_starrating_monotonic', 'prop_log_historical_price',
              'orig_destination_distance', 'price_difference_rank', 'srch_booking_window',

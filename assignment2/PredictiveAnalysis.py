@@ -243,8 +243,13 @@ test = test.reset_index()
 #########################################################
 
 #Different variable selections
-train['booking_click'] = train.booking_bool #Define a variable that is one if click or booked
+# train['booking_click'] = train.booking_bool #Define a variable that is one if click or booked
+# train.loc[train['booking_click'] == 0, 'booking_click'] = train.loc[train['booking_click'] == 0, 'click_bool']
+
+#TRY GIVING MORE WEIGHT TO A BOOKING OF A HOTEL
+train['booking_click'] = train.booking_bool * 5 #Define a variable that is one if click or booked
 train.loc[train['booking_click'] == 0, 'booking_click'] = train.loc[train['booking_click'] == 0, 'click_bool']
+train['booking_click'] = scale(train['booking_click'])
 
 m1_rnn = ['hotel_quality_click_srch_length_of_staystd',
        'hotel_quality_booking_srch_length_of_staystd', 'hotel_quality_click_prop_country_idstd',
@@ -275,12 +280,12 @@ m2_rnn= ['price_rank', 'star_rank','price_difference_rank',
        'price_difference_srch_length_of_staystd',
        'dummy_top5_avg', 'dummy_top510_avg', 'dummy_top1015_avg',
        'dummy_top1520_avg', 'dummy_top2050_avg',
-       'hotel_quality_booking',
-       'hotel_quality_click_srch_length_of_staystd',
-       'hotel_quality_booking_srch_destination_idstd',
        'hotel_quality_click',
-       'hotel_quality_booking_srch_length_of_staystd',
+       'hotel_quality_booking',
        'hotel_quality_click_srch_destination_idstd',
+       'hotel_quality_booking_srch_destination_idstd',
+       'hotel_quality_click_srch_length_of_staystd',
+       'hotel_quality_booking_srch_length_of_staystd',
        'hotel_position_avg_per_prop_id'] #Diversification only on explanatory variables
 
 m2_rnn_test = ['price_rank', 'star_rank', 'price_difference_rank',
@@ -342,9 +347,16 @@ in_nn_ndcg = neural_network.ndcg(result)
 
 
 'RandomForestClassifier'
+#####################################################
+#RUN THESE FIRST
+#####################################################
 from sklearn.ensemble import *
 from sklearn.gaussian_process import GaussianProcess
 from sklearn import svm
+from sklearn import model_selection
+#####################################################
+#
+#####################################################
 
 n_trees=350
 n_jobs=50
@@ -379,16 +391,12 @@ train = train.drop(['date_time', 'Unnamed: 0', 'Unnamed: 0.1', 'Unnamed: 0.1.1']
 not_in_test_cols = ['booking_click', 'booking_bool', 'click_bool', 'position', \
 'prop_id', \
 'srch_id', \
-'gross_bookings_usd', \
+'gross_bookings_usd',
 'hotel_position_avg', \
 'hotel_position_avg_visitor_location_country_idstd',\
 'hotel_position_avg_srch_length_of_staystd',\
 'hotel_position_avg_srch_destination_idstd', \
-'hotel_quality_booking_srch_destination_idstd',\
-'hotel_quality_booking_srch_length_of_staystd', \
 'hotel_quality_booking_visitor_location_country_idstd', \
-'hotel_quality_click_srch_destination_idstd', \
-'hotel_quality_click_srch_length_of_staystd', \
 'hotel_quality_click_visitor_location_country_idstd']
 train_cols = train.loc[:, train.columns.difference(not_in_test_cols)].columns.values
 
@@ -397,7 +405,7 @@ train_ = train[pd.Series(train.srch_id).isin(train_srch_id)] #Get train set
 test_ =  train[~pd.Series(train.srch_id).isin(train_srch_id)] #Get test set
 
 # Train random forest regressor
-rf0.fit(train_[m2_rnn], train_['booking_click'])
+rf0.fit(train_[train_cols], train_['booking_click'])
 
 # Use properties of random forests to determine feature importance
 importances = pd.DataFrame({'feature':train_[m2_rnn].columns,'importance':np.round(rf0.feature_importances_,3)})
@@ -405,7 +413,7 @@ importances = importances.sort_values('importance',ascending=False).set_index('f
 importances.plot.bar()
 
 # Good performance: 0.44 NDCG
-output_rf_out = rf0.predict(test_[m2_rnn])
+output_rf_out = rf0.predict(test_[train_cols])
 result = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
 result = result.assign(pred = output_rf_out)
 ndcg_test = ndcg(result)
@@ -417,28 +425,74 @@ rf1 = RandomForestRegressor(n_estimators=n_trees, verbose=2, n_jobs=n_jobs, rand
 rf2 = RandomForestRegressor(n_estimators=n_trees, verbose=2, n_jobs=n_jobs, random_state=1)
 
 #Train random forests for booking_bool and click_bool
-rf1.fit(train_[m2_rnn], train_['booking_click'])
-rf2.fit(train_[m2_rnn], train_['booking_bool'])
+# rf1.fit(train_[m2_rnn], train_['booking_click'])
+rf1.fit(train_[train_cols], train_['booking_click'])
+rf2.fit(train_[train_cols], train_['booking_bool'])
+# rf2.fit(train_[m2_rnn], train_['booking_bool'])
 
 #Generate predictions with each model
-output_rf1_out = rf1.predict(test_[m2_rnn])
-output_rf2_out = rf2.predict(test_[m2_rnn])
+output_rf1_out = rf1.predict(test_[train_cols])
+output_rf2_out = rf2.predict(test_[train_cols])
 
-w = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
-combination_df = pd.DataFrame(columns=w)
-for i in w:
-    combination_df[i] = output_rf1_out*i + output_rf2_out*(1-i)
+#HARD CODE THE COMBINATIONS TO BE SURE
+output_rf1rf2_0 = output_rf1_out*0 + output_rf2_out*1
+output_rf1rf2_01 = output_rf1_out*0.1 + output_rf2_out*0.9
+output_rf1rf2_02 = output_rf1_out*0.2 + output_rf2_out*0.8
+output_rf1rf2_03 = output_rf1_out*0.3 + output_rf2_out*0.7
+output_rf1rf2_04 = output_rf1_out*0.4 + output_rf2_out*0.6
+output_rf1rf2_05 = output_rf1_out*0.5 + output_rf2_out*0.5
+output_rf1rf2_06 = output_rf1_out*0.6 + output_rf2_out*0.4
+output_rf1rf2_07 = output_rf1_out*0.7 + output_rf2_out*0.3
+output_rf1rf2_08 = output_rf1_out*0.8 + output_rf2_out*0.2
+output_rf1rf2_09 = output_rf1_out*0.9 + output_rf2_out*0.1
+output_rf1rf2_1 = output_rf1_out*1 + output_rf2_out*0
 
-ndcg_test_ = np.zeros(len(w))*math.nan
-result = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
-it = 0
-for i in w:
-    result = result.assign(pred = combination_df[i])
-    ndcg_test = {'{}'.format(it): ndcg(result)}
-    print('For booking percent {}, NDCG is:'.format(i))
-    print(ndcg_test['{}'.format(it)])
-    result = result.drop('pred', axis=1)
-    it = it + 1
+result_0 = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
+result_0 = result_0.assign(pred= output_rf1rf2_0)
+result_01 = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
+result_01 = result_01.assign(pred= output_rf1rf2_01)
+result_02 = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
+result_02 = result_02.assign(pred= output_rf1rf2_02)
+result_03 = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
+result_03 = result_03.assign(pred= output_rf1rf2_03)
+result_04 = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
+result_04 = result_04.assign(pred= output_rf1rf2_04)
+result_05 = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
+result_05 = result_05.assign(pred= output_rf1rf2_05)
+result_06 = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
+result_06 = result_06.assign(pred= output_rf1rf2_06)
+result_07 = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
+result_07 = result_07.assign(pred= output_rf1rf2_07)
+result_08 = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
+result_08 = result_08.assign(pred= output_rf1rf2_08)
+result_09 = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
+result_09 = result_09.assign(pred= output_rf1rf2_09)
+result_1 = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
+result_1 = result_1.assign(pred= output_rf1rf2_1)
+
+ndcg_test_0 = ndcg(result_0)
+ndcg_test_01 = ndcg(result_01)
+ndcg_test_02 = ndcg(result_02)
+ndcg_test_03 = ndcg(result_03)
+ndcg_test_04 = ndcg(result_04)
+ndcg_test_05 = ndcg(result_05)
+ndcg_test_06 = ndcg(result_06)
+ndcg_test_07 = ndcg(result_07)
+ndcg_test_08 = ndcg(result_08)
+ndcg_test_09 = ndcg(result_09)
+ndcg_test_1 = ndcg(result_1)
+
+print(ndcg_test_0)
+print(ndcg_test_01)
+print(ndcg_test_02)
+print(ndcg_test_03)
+print(ndcg_test_04)
+print(ndcg_test_05)
+print(ndcg_test_06)
+print(ndcg_test_07)
+print(ndcg_test_08)
+print(ndcg_test_09)
+print(ndcg_test_1)
 
 # ENSEMBLE METHODS
 from sklearn.ensemble import *
@@ -468,6 +522,24 @@ _ = rf0.fit(train_[m2_rnn], train_['booking_click'])
 #and again...
 _ = rf0.set_params(n_estimators=400, warm_start=True)
 _ = rf0.fit(train_[m2_rnn], train_['booking_click'])
+#and again...
+_ = rf0.set_params(n_estimators=500, warm_start=True)
+_ = rf0.fit(train_[m2_rnn], train_['booking_click'])
+#and again...
+_ = rf0.set_params(n_estimators=600, warm_start=True)
+_ = rf0.fit(train_[m2_rnn], train_['booking_click'])
+#and again...
+_ = rf0.set_params(n_estimators=700, warm_start=True)
+_ = rf0.fit(train_[m2_rnn], train_['booking_click'])
+#and again...
+_ = rf0.set_params(n_estimators=800, warm_start=True)
+_ = rf0.fit(train_[m2_rnn], train_['booking_click'])
+#and again...
+_ = rf0.set_params(n_estimators=900, warm_start=True)
+_ = rf0.fit(train_[m2_rnn], train_['booking_click'])
+#and again...
+_ = rf0.set_params(n_estimators=1000, warm_start=True)
+_ = rf0.fit(train_[m2_rnn], train_['booking_click'])
 
 output_rf_out = rf0.predict(test_[m2_rnn])
 result = test_[['prop_id', 'srch_id','booking_bool', 'click_bool']]
@@ -476,6 +548,26 @@ ndcg_test = ndcg(result)
 
 with open('results/ndcg_test_first_ensemble.pkl', 'wb') as handle:
     pickle.dump(ndcg_test, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+#####################################################
+#MORE ENSEMBLE METHODS
+#####################################################
+train_srch_id = np.random.choice(a = train.srch_id.unique(), size = round(len(train.srch_id.unique())*0.80), replace = False)
+train_ = train[pd.Series(train.srch_id).isin(train_srch_id)]
+test_ =  train[~pd.Series(train.srch_id).isin(train_srch_id)]
+
+seed=10
+kfold = model_selection.KFold(n_splits=2, random_state=seed)
+
+rf0 = ExtraTreesRegressor(n_estimators=100,
+                            bootstrap=True,
+                            # oob_score=True,
+                            verbose=2,
+                            n_jobs=n_jobs,
+                            random_state=1)
+
+results = model_selection.cross_val_score(rf0, train_[m2_rnn], train_['booking_click'], cv=kfold)
+
 
 
 'Logistic Regression'
